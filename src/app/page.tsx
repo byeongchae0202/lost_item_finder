@@ -8,6 +8,7 @@ import {
   CalendarDays,
   Check,
   ChevronDown,
+  CircleHelp,
   CreditCard,
   ImagePlus,
   KeyRound,
@@ -25,6 +26,7 @@ import type { LucideIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ITEM_CATEGORIES, type ItemCategory } from "@/lib/lost-items/categories";
 import type { LostItemRecord } from "@/lib/lost-items/database";
+import LostReportForm from "./lost-report-form";
 
 type SearchFilters = {
   keyword: string;
@@ -93,6 +95,7 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
+  const [isLostReportOpen, setIsLostReportOpen] = useState(false);
   const [error, setError] = useState("");
   const [formError, setFormError] = useState("");
   const [notice, setNotice] = useState("");
@@ -220,6 +223,9 @@ export default function Home() {
         </Link>
         <div className="topbar-actions">
           <span className="open-status"><span />운영 중</span>
+          <button className="button button-outline header-lost" onClick={() => setIsLostReportOpen(true)}>
+            <CircleHelp size={16} /> 분실 신고
+          </button>
           <button className="button button-primary header-register" onClick={openRegistration}>
             <Plus size={17} /> 습득물 등록
           </button>
@@ -248,9 +254,14 @@ export default function Home() {
             <p className="section-kicker">THE FINDER BOARD</p>
             <h2>습득물 둘러보기 <span>{items.length}</span></h2>
           </div>
-          <button className="button button-outline mobile-register" onClick={openRegistration}>
-            <Plus size={16} /> 등록하기
-          </button>
+          <div className="section-actions">
+            <button className="button button-outline mobile-lost" onClick={() => setIsLostReportOpen(true)}>
+              <CircleHelp size={15} /> 분실 신고
+            </button>
+            <button className="button button-primary mobile-register" onClick={openRegistration}>
+              <Plus size={16} /> 습득물 등록
+            </button>
+          </div>
         </div>
 
         <div className="board-layout">
@@ -392,7 +403,10 @@ export default function Home() {
                 <p className="empty-kicker">NOTHING HERE, YET</p>
                 <h3>아직 찾는 결과가 없어요.</h3>
                 <p>검색 조건을 바꾸거나 첫 습득물을 등록해 보세요.</p>
-                <button className="button button-outline" onClick={openRegistration}><Plus size={16} /> 습득물 등록</button>
+                <div className="section-actions">
+                  <button className="button button-outline" onClick={() => setIsLostReportOpen(true)}><CircleHelp size={16} /> 분실 신고</button>
+                  <button className="button button-primary" onClick={openRegistration}><Plus size={16} /> 습득물 등록</button>
+                </div>
               </div>
             )}
           </section>
@@ -478,6 +492,7 @@ export default function Home() {
           </section>
         </div>
       )}
+      {isLostReportOpen && <LostReportForm onClose={() => setIsLostReportOpen(false)} />}
     </main>
   );
 }

@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import Home from "./page";
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn() }),
+}));
 
 beforeEach(() => {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => [] }));
@@ -30,5 +34,17 @@ describe("app shell", () => {
 
     expect(dateInput).toHaveProperty("value", today);
     expect(dateInput.getAttribute("max")).toBe(today);
+  });
+
+  it("opens the private lost report form with required fields", () => {
+    render(<Home />);
+    fireEvent.click(screen.getAllByRole("button", { name: /분실 신고/ })[0]);
+
+    const dialog = screen.getByRole("dialog", { name: "분실 신고" });
+    const form = within(dialog);
+    expect(dialog).toBeTruthy();
+    expect(form.getByRole("textbox", { name: /물품명/ })).toBeTruthy();
+    expect(form.getByRole("textbox", { name: /분실 장소/ })).toBeTruthy();
+    expect(form.getByLabelText(/분실 날짜/)).toBeTruthy();
   });
 });

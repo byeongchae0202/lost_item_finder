@@ -1,5 +1,13 @@
 import { isItemCategory, type ItemCategory } from "./categories";
 
+export type CreateLostReportInput = {
+  title: string;
+  category: ItemCategory;
+  location: string;
+  lostDate: string;
+  description?: string;
+};
+
 export type CreateLostItemInput = {
   title: string;
   category: ItemCategory;
@@ -68,4 +76,47 @@ export function parseCreateLostItemInput(
   }
 
   return { title, category, location, description, foundDate };
+}
+
+export function parseCreateLostReportInput(
+  value: unknown,
+  today = getTodayDateString(),
+): CreateLostReportInput {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new LostItemValidationError("A JSON object is required.");
+  }
+
+  const input = value as Record<string, unknown>;
+  const title = requiredText(input, "title");
+  const category = requiredText(input, "category");
+  if (!isItemCategory(category)) {
+    throw new LostItemValidationError("category must be a supported category.");
+  }
+
+  const location = requiredText(input, "location");
+  const lostDate = requiredText(input, "lostDate");
+  if (!isValidDateString(lostDate)) {
+    throw new LostItemValidationError("lostDate must be a valid YYYY-MM-DD date.");
+  }
+  if (lostDate > today) {
+    throw new LostItemValidationError("lostDate cannot be in the future.");
+  }
+
+  const descriptionValue = input.description;
+  if (descriptionValue !== undefined && typeof descriptionValue !== "string") {
+    throw new LostItemValidationError("description must be text.");
+  }
+  const description = typeof descriptionValue === "string" ? descriptionValue.trim() : "";
+
+  if (title.length > 80 || location.length > 120 || description.length > 1000) {
+    throw new LostItemValidationError("One or more fields exceed the maximum length.");
+  }
+
+  return {
+    title,
+    category,
+    location,
+    lostDate,
+    ...(description ? { description } : {}),
+  };
 }

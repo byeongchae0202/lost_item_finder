@@ -3,12 +3,22 @@ import { mkdirSync } from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
 import type { ItemCategory } from "./categories";
-import type { CreateLostItemInput } from "./validation";
+import type { CreateLostItemInput, CreateLostReportInput } from "./validation";
 
 export type LostItemRecord = CreateLostItemInput & {
   id: string;
   photoPaths: string[];
   createdAt: string;
+};
+
+export type LostReportRecord = CreateLostReportInput & {
+  id: string;
+  photoPaths: string[];
+  createdAt: string;
+};
+
+export type PrivateLostReportRecord = LostReportRecord & {
+  ownerTokenHash: string;
 };
 
 type LostItemRow = {
@@ -19,6 +29,18 @@ type LostItemRow = {
   description: string;
   found_date: string;
   photo_paths: string;
+  created_at: string;
+};
+
+type LostReportRow = {
+  id: string;
+  title: string;
+  category: string;
+  location: string;
+  lost_date: string;
+  description: string | null;
+  photo_paths: string;
+  owner_token_hash: string;
   created_at: string;
 };
 
@@ -40,11 +62,27 @@ export function initializeLostItemsDatabase(database: Database.Database): void {
       photo_paths TEXT NOT NULL DEFAULT '[]',
       created_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS lost_reports (
+      id TEXT PRIMARY KEY NOT NULL,
+      title TEXT NOT NULL,
+      category TEXT NOT NULL,
+      location TEXT NOT NULL,
+      lost_date TEXT NOT NULL,
+      description TEXT,
+      photo_paths TEXT NOT NULL DEFAULT '[]',
+      owner_token_hash TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS lost_reports_owner_token_hash_idx
+      ON lost_reports(owner_token_hash);
   `);
 }
 
 export function getLostItemsDatabase(): Database.Database {
   if (globalWithLostItemsDatabase.lostItemsDatabase) {
+    initializeLostItemsDatabase(globalWithLostItemsDatabase.lostItemsDatabase);
     return globalWithLostItemsDatabase.lostItemsDatabase;
   }
 
@@ -137,4 +175,90 @@ export function getAllLostItems(): LostItemRecord[] {
 
 export function getLostItem(id: string): LostItemRecord | null {
   return getLostItemById(getLostItemsDatabase(), id);
+}
+
+function mapLostReport(row: LostReportRow): PrivateLostReportRecord {
+  return {
+    id: row.id,
+    title: row.title,
+    category: row.category as ItemCategory,
+    location: row.location,
+    lostDate: row.lost_date,
+    description: row.description ?? undefined,
+    photoPaths: JSON.parse(row.photo_paths) as string[],
+    ownerTokenHash: row.owner_token_hash,
+    createdAt: row.created_at,
+  };
+}
+
+export function insertLostReport(
+  database: Database.Database,
+  input: CreateLostReportInput,
+  ownerTokenHash: string,
+  options: { createdAt?: string; photoPaths?: string[] } = {},
+): PrivateLostReportRecord {
+  const id = randomUUID();
+  const createdAt = options.createdAt ?? new Date().toISOString();
+  const photoPaths = options.photoPaths ?? [];
+
+  database
+    .prepare(
+      `INSERT INTO lost_reports
+        (id, title, category, location, lost_date, description, photo_paths, owner_token_hash, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      id,
+      input.title,
+      input.category,
+      input.location,
+      input.lostDate,
+      input.description ?? null,
+      JSON.stringify(photoPaths),
+      ownerTokenHash,
+      createdAt,
+    );
+
+  const row = database
+    .prepare("SELECT * FROM lost_reports WHERE id = ?")
+    .get(id) as LostReportRow | undefined;
+
+  if (!row) {
+    throw new Error("The saved lost report could not be read back.");
+  }
+
+  return mapLostReport(row);
+}
+
+export function getLostReportById(
+  database: Database.Database,
+  id: string,
+): PrivateLostReportRecord | null {
+  const row = database
+    .prepare("SELECT * FROM lost_reports WHERE id = ?")
+    .get(id) as LostReportRow | undefined;
+
+  return row ? mapLostReport(row) : null;
+}
+
+export function createLostReport(
+  input: CreateLostReportInput,
+  ownerTokenHash: string,
+  photoPaths: string[] = [],
+): LostReportRecord {
+  const report = insertLostReport(getLostItemsDatabase(), input, ownerTokenHash, { photoPaths });
+  return {
+    id: report.id,
+    title: report.title,
+    category: report.category,
+    location: report.location,
+    lostDate: report.lostDate,
+    description: report.description,
+    photoPaths: report.photoPaths,
+    createdAt: report.createdAt,
+  };
+}
+
+export function getLostReport(id: string): PrivateLostReportRecord | null {
+  return getLostReportById(getLostItemsDatabase(), id);
 }
