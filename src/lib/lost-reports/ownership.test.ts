@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createReportOwnerToken,
   hashReportOwnerToken,
+  lostItemOwnerCookieName,
   reportOwnerCookieName,
   verifyReportOwnerToken,
 } from "./ownership";
@@ -25,5 +26,6 @@ describe("lost report ownership tokens", () => {
 
   it("uses a per-report cookie name", () => {
     expect(reportOwnerCookieName("report-123")).toBe("lost-report-owner-report-123");
+    expect(lostItemOwnerCookieName("item-123")).toBe("lost-item-owner-item-123");
   });
 });

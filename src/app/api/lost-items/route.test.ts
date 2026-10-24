@@ -1,15 +1,19 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { NextRequest } from "next/server";
+import { hashReportOwnerToken, lostItemOwnerCookieName } from "@/lib/lost-reports/ownership";
 
 const {
   createLostItemMock,
   getAllLostItemsMock,
+  getLostItemOwnerTokenHashMock,
   validatePhotoFilesMock,
   storePhotoFilesMock,
   deleteStoredPhotoFilesMock,
 } = vi.hoisted(() => ({
   createLostItemMock: vi.fn(),
   getAllLostItemsMock: vi.fn(),
+  getLostItemOwnerTokenHashMock: vi.fn(),
   validatePhotoFilesMock: vi.fn(),
   storePhotoFilesMock: vi.fn(),
   deleteStoredPhotoFilesMock: vi.fn(),
@@ -18,6 +22,7 @@ const {
 vi.mock("@/lib/lost-items/database", () => ({
   createLostItem: createLostItemMock,
   getAllLostItems: getAllLostItemsMock,
+  getLostItemOwnerTokenHash: getLostItemOwnerTokenHashMock,
 }));
 
 vi.mock("@/lib/lost-items/photos", () => ({
@@ -37,6 +42,7 @@ const validInput = {
 };
 
 beforeEach(() => {
+  getLostItemOwnerTokenHashMock.mockReturnValue(null);
   validatePhotoFilesMock.mockResolvedValue([]);
   storePhotoFilesMock.mockResolvedValue([]);
 });
@@ -49,15 +55,29 @@ describe("lost items route", () => {
   it("returns all saved items", async () => {
     getAllLostItemsMock.mockReturnValue([{ id: "item-1", ...validInput }]);
 
-    const response = GET(new Request("http://localhost/api/lost-items"));
+    const response = GET(new NextRequest("http://localhost/api/lost-items"));
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toHaveLength(1);
   });
 
+  it("marks an item as owned only when its cookie hash matches", async () => {
+    const token = "a".repeat(43);
+    getAllLostItemsMock.mockReturnValue([{ id: "item-1", ...validInput }]);
+    getLostItemOwnerTokenHashMock.mockReturnValue(hashReportOwnerToken(token));
+
+    const response = GET(
+      new NextRequest("http://localhost/api/lost-items", {
+        headers: { cookie: `${lostItemOwnerCookieName("item-1")}=${token}` },
+      }),
+    );
+
+    await expect(response.json()).resolves.toMatchObject([{ id: "item-1", isOwner: true }]);
+  });
+
   it("rejects an unsupported category filter", async () => {
     const response = GET(
-      new Request("http://localhost/api/lost-items?category=음식"),
+      new NextRequest("http://localhost/api/lost-items?category=음식"),
     );
 
     expect(response.status).toBe(400);
@@ -75,7 +95,13 @@ describe("lost items route", () => {
     const response = await POST(request);
 
     expect(response.status).toBe(201);
-    expect(createLostItemMock).toHaveBeenCalledWith(validInput, []);
+    expect(createLostItemMock).toHaveBeenCalledWith(
+      validInput,
+      [],
+      expect.stringMatching(/^[a-f\d]{64}$/),
+    );
+    expect(response.headers.get("set-cookie")).toContain("HttpOnly");
+    expect(response.headers.get("set-cookie")).toContain("Path=/api/lost-items");
     await expect(response.json()).resolves.toMatchObject({ id: "item-1" });
   });
 
@@ -104,7 +130,11 @@ describe("lost items route", () => {
 
     expect(response.status).toBe(201);
     expect(validatePhotoFilesMock).toHaveBeenCalledWith([expect.any(File)]);
-    expect(createLostItemMock).toHaveBeenCalledWith(validInput, ["generated.png"]);
+    expect(createLostItemMock).toHaveBeenCalledWith(
+      validInput,
+      ["generated.png"],
+      expect.stringMatching(/^[a-f\d]{64}$/),
+    );
   });
 
   it("returns 400 for invalid JSON", async () => {

@@ -1,10 +1,13 @@
 import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  deleteOwnedLostItem,
+  getLostItemById,
   initializeLostItemsDatabase,
   insertLostReport,
   insertLostItem,
   listLostItems,
+  resolveLostItemForReport,
 } from "./database";
 import { searchLostItems } from "./search";
 
@@ -82,9 +85,64 @@ describe("lost item database", () => {
     const reportTable = legacyDatabase
       .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'lost_reports'")
       .get();
+    const lostItemColumns = legacyDatabase
+      .prepare("PRAGMA table_info(lost_items)")
+      .all() as { name: string }[];
     legacyDatabase.close();
 
     expect(reportTable).toBeTruthy();
+    expect(lostItemColumns.map((column) => column.name)).toContain("owner_token_hash");
+    expect(lostItemColumns.map((column) => column.name)).toContain("status");
+  });
+
+  it("deletes a found item only when the owner token hash matches", () => {
+    const item = insertLostItem(
+      database,
+      {
+        title: "검은색 지갑",
+        category: "지갑/카드",
+        location: "중앙 도서관",
+        description: "학생증 포함",
+        foundDate: "2000-01-01",
+      },
+      { ownerTokenHash: "owner-hash", photoPaths: ["photo.png"] },
+    );
+
+    expect(deleteOwnedLostItem(database, item.id, "someone-else")).toBeNull();
+    expect(listLostItems(database)).toHaveLength(1);
+    expect(deleteOwnedLostItem(database, item.id, "owner-hash")).toEqual(["photo.png"]);
+    expect(listLostItems(database)).toEqual([]);
+  });
+
+  it("hides a claimed found item from future lists and matches", () => {
+    const item = insertLostItem(
+      database,
+      {
+        title: "검은색 태블릿",
+        category: "전자기기",
+        location: "공학관",
+        description: "파란 케이스",
+        foundDate: "2026-10-20",
+      },
+      { photoPaths: ["found.png"] },
+    );
+    const report = insertLostReport(
+      database,
+      {
+        title: "검은색 태블릿",
+        category: "전자기기",
+        location: "공학관",
+        lostDate: "2026-10-20",
+      },
+      "report-owner-hash",
+    );
+
+    expect(resolveLostItemForReport(database, item.id, report.id, "wrong-hash")).toBeNull();
+    expect(resolveLostItemForReport(database, item.id, report.id, "report-owner-hash")).toEqual([
+      "found.png",
+    ]);
+    expect(listLostItems(database)).toEqual([]);
+    expect(getLostItemById(database, item.id)).toBeNull();
   });
 
   it("stores owner token hashes and optional report photos without exposing them as item fields", () => {

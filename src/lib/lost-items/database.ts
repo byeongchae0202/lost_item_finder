@@ -29,6 +29,8 @@ type LostItemRow = {
   description: string;
   found_date: string;
   photo_paths: string;
+  owner_token_hash: string | null;
+  status: "available" | "resolved";
   created_at: string;
 };
 
@@ -60,6 +62,8 @@ export function initializeLostItemsDatabase(database: Database.Database): void {
       description TEXT NOT NULL,
       found_date TEXT NOT NULL,
       photo_paths TEXT NOT NULL DEFAULT '[]',
+      owner_token_hash TEXT,
+      status TEXT NOT NULL DEFAULT 'available',
       created_at TEXT NOT NULL
     );
 
@@ -78,6 +82,17 @@ export function initializeLostItemsDatabase(database: Database.Database): void {
     CREATE INDEX IF NOT EXISTS lost_reports_owner_token_hash_idx
       ON lost_reports(owner_token_hash);
   `);
+
+  const lostItemColumns = database
+    .prepare("PRAGMA table_info(lost_items)")
+    .all() as { name: string }[];
+  const columnNames = new Set(lostItemColumns.map((column) => column.name));
+  if (!columnNames.has("owner_token_hash")) {
+    database.exec("ALTER TABLE lost_items ADD COLUMN owner_token_hash TEXT");
+  }
+  if (!columnNames.has("status")) {
+    database.exec("ALTER TABLE lost_items ADD COLUMN status TEXT NOT NULL DEFAULT 'available'");
+  }
 }
 
 export function getLostItemsDatabase(): Database.Database {
@@ -113,7 +128,7 @@ function mapLostItem(row: LostItemRow): LostItemRecord {
 export function insertLostItem(
   database: Database.Database,
   input: CreateLostItemInput,
-  options: { createdAt?: string; photoPaths?: string[] } = {},
+  options: { createdAt?: string; photoPaths?: string[]; ownerTokenHash?: string } = {},
 ): LostItemRecord {
   const id = randomUUID();
   const createdAt = options.createdAt ?? new Date().toISOString();
@@ -121,8 +136,8 @@ export function insertLostItem(
   database
     .prepare(
       `INSERT INTO lost_items
-        (id, title, category, location, description, found_date, photo_paths, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        (id, title, category, location, description, found_date, photo_paths, owner_token_hash, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       id,
@@ -132,6 +147,7 @@ export function insertLostItem(
       input.description,
       input.foundDate,
       JSON.stringify(photoPaths),
+      options.ownerTokenHash ?? null,
       createdAt,
     );
 
@@ -148,7 +164,7 @@ export function insertLostItem(
 
 export function listLostItems(database: Database.Database): LostItemRecord[] {
   const rows = database
-    .prepare("SELECT * FROM lost_items ORDER BY found_date DESC, created_at DESC")
+    .prepare("SELECT * FROM lost_items WHERE status = 'available' ORDER BY found_date DESC, created_at DESC")
     .all() as LostItemRow[];
 
   return rows.map(mapLostItem);
@@ -156,7 +172,7 @@ export function listLostItems(database: Database.Database): LostItemRecord[] {
 
 export function getLostItemById(database: Database.Database, id: string): LostItemRecord | null {
   const row = database
-    .prepare("SELECT * FROM lost_items WHERE id = ?")
+    .prepare("SELECT * FROM lost_items WHERE id = ? AND status = 'available'")
     .get(id) as LostItemRow | undefined;
 
   return row ? mapLostItem(row) : null;
@@ -165,8 +181,9 @@ export function getLostItemById(database: Database.Database, id: string): LostIt
 export function createLostItem(
   input: CreateLostItemInput,
   photoPaths: string[] = [],
+  ownerTokenHash?: string,
 ): LostItemRecord {
-  return insertLostItem(getLostItemsDatabase(), input, { photoPaths });
+  return insertLostItem(getLostItemsDatabase(), input, { photoPaths, ownerTokenHash });
 }
 
 export function getAllLostItems(): LostItemRecord[] {
@@ -175,6 +192,72 @@ export function getAllLostItems(): LostItemRecord[] {
 
 export function getLostItem(id: string): LostItemRecord | null {
   return getLostItemById(getLostItemsDatabase(), id);
+}
+
+export function getLostItemOwnerTokenHash(id: string): string | null {
+  const row = getLostItemsDatabase()
+    .prepare("SELECT owner_token_hash FROM lost_items WHERE id = ? AND status = 'available'")
+    .get(id) as { owner_token_hash: string | null } | undefined;
+
+  return row?.owner_token_hash ?? null;
+}
+
+export function resolveLostItemById(database: Database.Database, id: string): string[] | null {
+  const row = database
+    .prepare("SELECT photo_paths FROM lost_items WHERE id = ? AND status = 'available'")
+    .get(id) as { photo_paths: string } | undefined;
+  if (!row) return null;
+
+  const result = database
+    .prepare("UPDATE lost_items SET status = 'resolved' WHERE id = ? AND status = 'available'")
+    .run(id);
+  return result.changes > 0 ? (JSON.parse(row.photo_paths) as string[]) : null;
+}
+
+export function deleteOwnedLostItem(
+  database: Database.Database,
+  id: string,
+  ownerTokenHash: string,
+): string[] | null {
+  const transaction = database.transaction(() => {
+    const row = database
+      .prepare("SELECT photo_paths FROM lost_items WHERE id = ? AND status = 'available' AND owner_token_hash = ?")
+      .get(id, ownerTokenHash) as { photo_paths: string } | undefined;
+    if (!row) return null;
+
+    const result = database
+      .prepare("DELETE FROM lost_items WHERE id = ? AND status = 'available' AND owner_token_hash = ?")
+      .run(id, ownerTokenHash);
+    return result.changes > 0 ? (JSON.parse(row.photo_paths) as string[]) : null;
+  });
+
+  return transaction();
+}
+
+export function resolveLostItemForReport(
+  database: Database.Database,
+  id: string,
+  reportId: string,
+  ownerTokenHash: string,
+): string[] | null {
+  const transaction = database.transaction(() => {
+    const report = database
+      .prepare("SELECT id FROM lost_reports WHERE id = ? AND owner_token_hash = ?")
+      .get(reportId, ownerTokenHash);
+    if (!report) return null;
+
+    const row = database
+      .prepare("SELECT photo_paths FROM lost_items WHERE id = ? AND status = 'available'")
+      .get(id) as { photo_paths: string } | undefined;
+    if (!row) return null;
+
+    const result = database
+      .prepare("UPDATE lost_items SET status = 'resolved' WHERE id = ? AND status = 'available'")
+      .run(id);
+    return result.changes > 0 ? (JSON.parse(row.photo_paths) as string[]) : null;
+  });
+
+  return transaction();
 }
 
 function mapLostReport(row: LostReportRow): PrivateLostReportRecord {

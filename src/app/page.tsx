@@ -20,6 +20,7 @@ import {
   Shapes,
   Shirt,
   Smartphone,
+  Trash2,
   X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -33,6 +34,8 @@ type SearchFilters = {
   location: string;
   category: ItemCategory | "";
 };
+
+type ListedLostItem = LostItemRecord & { isOwner?: boolean };
 
 type RegistrationFields = {
   title: string;
@@ -87,7 +90,7 @@ function formatDate(value: string): string {
 }
 
 export default function Home() {
-  const [items, setItems] = useState<LostItemRecord[]>([]);
+  const [items, setItems] = useState<ListedLostItem[]>([]);
   const [filters, setFilters] = useState<SearchFilters>(emptyFilters);
   const [fields, setFields] = useState<RegistrationFields>(emptyFields);
   const [photos, setPhotos] = useState<File[]>([]);
@@ -96,6 +99,9 @@ export default function Home() {
   const [isSaving, setIsSaving] = useState(false);
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
   const [isLostReportOpen, setIsLostReportOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<ListedLostItem | null>(null);
+  const [isDeletingItem, setIsDeletingItem] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
   const [error, setError] = useState("");
   const [formError, setFormError] = useState("");
   const [notice, setNotice] = useState("");
@@ -107,7 +113,7 @@ export default function Home() {
     fetch("/api/lost-items")
       .then(async (response) => {
         if (!response.ok) throw new Error("습득물 목록을 불러오지 못했습니다.");
-        return (await response.json()) as LostItemRecord[];
+        return (await response.json()) as ListedLostItem[];
       })
       .then((result) => {
         if (active) setItems(result);
@@ -134,7 +140,7 @@ export default function Home() {
     try {
       const response = await fetch(buildSearchUrl(filters));
       if (!response.ok) throw new Error("검색 결과를 불러오지 못했습니다.");
-      setItems((await response.json()) as LostItemRecord[]);
+      setItems((await response.json()) as ListedLostItem[]);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "검색에 실패했습니다.");
     } finally {
@@ -200,13 +206,31 @@ export default function Home() {
 
       const listResponse = await fetch(buildSearchUrl(filters));
       if (!listResponse.ok) throw new Error("등록은 완료됐지만 목록을 새로고침하지 못했습니다.");
-      setItems((await listResponse.json()) as LostItemRecord[]);
+      setItems((await listResponse.json()) as ListedLostItem[]);
       setIsRegisterOpen(false);
       setNotice("습득물이 등록됐습니다.");
     } catch (requestError) {
       setFormError(requestError instanceof Error ? requestError.message : "등록에 실패했습니다.");
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  async function deleteItem() {
+    if (!deleteTarget) return;
+    setIsDeletingItem(true);
+    setDeleteError("");
+
+    try {
+      const response = await fetch(`/api/lost-items/${deleteTarget.id}`, { method: "DELETE" });
+      if (!response.ok) throw new Error("게시물을 삭제할 수 없습니다.");
+      setItems((current) => current.filter((item) => item.id !== deleteTarget.id));
+      setDeleteTarget(null);
+      setNotice("습득물 게시물을 삭제했습니다.");
+    } catch (requestError) {
+      setDeleteError(requestError instanceof Error ? requestError.message : "삭제에 실패했습니다.");
+    } finally {
+      setIsDeletingItem(false);
     }
   }
 
@@ -218,11 +242,8 @@ export default function Home() {
         <Link className="brand" href="/" aria-label="찾았어요 홈">
           <span className="brand-mark"><PackageSearch size={21} strokeWidth={2.2} /></span>
           <span className="brand-name">찾았어요</span>
-          <span className="brand-divider" />
-          <span className="brand-subtitle">CAMPUS LOST & FOUND</span>
         </Link>
         <div className="topbar-actions">
-          <span className="open-status"><span />운영 중</span>
           <button className="button button-outline header-lost" onClick={() => setIsLostReportOpen(true)}>
             <CircleHelp size={16} /> 분실 신고
           </button>
@@ -232,27 +253,10 @@ export default function Home() {
         </div>
       </header>
 
-      <section className="intro-band">
-        <div className="intro-inner">
-          <div className="intro-copy">
-            <p className="eyebrow"><span>분실물 게시판</span><span className="eyebrow-dot" /> CAMPUS, CONNECTED</p>
-            <h1>찾는 사람과<br /><em>발견한 사람</em>을 잇다.</h1>
-            <p className="intro-caption">캠퍼스에서 발견된 물건을 등록하고, 주인을 함께 찾아요.</p>
-          </div>
-          <div className="intro-summary" aria-label="현재 게시 현황">
-            <span className="summary-label">등록된 습득물</span>
-            <strong>{items.length.toString().padStart(2, "0")}</strong>
-            <span className="summary-foot">ITEMS ON THE BOARD <span>↗</span></span>
-          </div>
-          <div className="intro-stamp" aria-hidden="true"><span>FOUND</span><span>·</span><span>TOGETHER</span></div>
-        </div>
-      </section>
-
       <div className="content-wrap">
         <div className="section-heading">
           <div>
-            <p className="section-kicker">THE FINDER BOARD</p>
-            <h2>습득물 둘러보기 <span>{items.length}</span></h2>
+            <h1>습득물 <span>{items.length}</span></h1>
           </div>
           <div className="section-actions">
             <button className="button button-outline mobile-lost" onClick={() => setIsLostReportOpen(true)}>
@@ -264,97 +268,71 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="board-layout">
-          <aside className="filter-panel" aria-label="습득물 검색 및 필터">
-            <form onSubmit={submitSearch}>
-              <div className="filter-title-row">
-                <h3><Search size={17} /> 검색 필터</h3>
-                <button
-                  type="button"
-                  className="text-button"
-                  onClick={() => setFilters(emptyFilters)}
-                >초기화</button>
-              </div>
+        <section className="market-tools" aria-label="습득물 검색 및 카테고리">
+          <form className="market-search" onSubmit={submitSearch}>
+            <label className="market-search-field" htmlFor="keyword-search">
+              <Search size={18} aria-hidden="true" />
+              <input
+                id="keyword-search"
+                value={filters.keyword}
+                onChange={(event) => setFilters((current) => ({ ...current, keyword: event.target.value }))}
+                placeholder="어떤 물건을 찾으세요?"
+              />
+            </label>
+            <label className="market-search-field market-location-field" htmlFor="location-search">
+              <MapPin size={18} aria-hidden="true" />
+              <input
+                id="location-search"
+                value={filters.location}
+                onChange={(event) => setFilters((current) => ({ ...current, location: event.target.value }))}
+                placeholder="장소"
+              />
+            </label>
+            <button className="button button-primary market-search-submit" type="submit" disabled={isLoading}>
+              {isLoading ? <LoaderCircle className="spin" size={17} /> : <Search size={17} />}
+              검색
+            </button>
+            <button className="market-reset" type="button" onClick={() => setFilters(emptyFilters)}>초기화</button>
+          </form>
 
-              <label className="field-label" htmlFor="keyword-search">키워드</label>
-              <div className="input-with-icon">
-                <Search size={17} aria-hidden="true" />
-                <input
-                  id="keyword-search"
-                  value={filters.keyword}
-                  onChange={(event) => setFilters((current) => ({ ...current, keyword: event.target.value }))}
-                  placeholder="물품명이나 특징 검색"
-                />
-              </div>
-              <p className="field-hint">물품명 · 특징 · 습득 장소에서 찾아요</p>
-
-              <label className="field-label location-label" htmlFor="location-search">습득 장소</label>
-              <div className="input-with-icon">
-                <MapPin size={17} aria-hidden="true" />
-                <input
-                  id="location-search"
-                  value={filters.location}
-                  onChange={(event) => setFilters((current) => ({ ...current, location: event.target.value }))}
-                  placeholder="예: 공학관, 도서관"
-                />
-              </div>
-
-              <div className="category-filter-heading">
-                <span className="field-label">카테고리</span>
-                <span className="optional-label">선택</span>
-              </div>
-              <div className="category-options">
-                <label className={`category-option ${filters.category === "" ? "is-selected" : ""}`}>
+          <div className="market-category-row" role="group" aria-label="카테고리">
+            <label className={`market-category ${filters.category === "" ? "is-selected" : ""}`}>
+              <input
+                type="radio"
+                name="filter-category"
+                value=""
+                checked={filters.category === ""}
+                onChange={() => setFilters((current) => ({ ...current, category: "" }))}
+              />
+              <Shapes size={16} /> 전체
+            </label>
+            {ITEM_CATEGORIES.map((category) => {
+              const Icon = categoryIcons[category.label];
+              return (
+                <label
+                  className={`market-category ${filters.category === category.label ? "is-selected" : ""}`}
+                  key={category.id}
+                >
                   <input
                     type="radio"
                     name="filter-category"
-                    value=""
-                    checked={filters.category === ""}
-                    onChange={() => setFilters((current) => ({ ...current, category: "" }))}
+                    value={category.label}
+                    checked={filters.category === category.label}
+                    onChange={() => setFilters((current) => ({ ...current, category: category.label }))}
                   />
-                  <span className="category-option-icon all-icon"><Shapes size={16} /></span>
-                  <span>전체 카테고리</span>
-                  <span className="radio-indicator" />
+                  <Icon size={16} /> {category.label}
                 </label>
-                {ITEM_CATEGORIES.map((category) => {
-                  const Icon = categoryIcons[category.label];
-                  return (
-                    <label
-                      className={`category-option ${filters.category === category.label ? "is-selected" : ""}`}
-                      key={category.id}
-                    >
-                      <input
-                        type="radio"
-                        name="filter-category"
-                        value={category.label}
-                        checked={filters.category === category.label}
-                        onChange={() => setFilters((current) => ({ ...current, category: category.label }))}
-                      />
-                      <span className={`category-option-icon category-${category.id}`}><Icon size={16} /></span>
-                      <span>{category.label}</span>
-                      <span className="radio-indicator" />
-                    </label>
-                  );
-                })}
-              </div>
-              <button className="button button-primary filter-submit" type="submit" disabled={isLoading}>
-                {isLoading ? <LoaderCircle className="spin" size={17} /> : <Search size={17} />}
-                {isLoading ? "검색 중" : "결과 검색"}
-              </button>
-            </form>
+              );
+            })}
+          </div>
+        </section>
 
-            <div className="side-note">
-              <span className="side-note-icon"><ImagePlus size={17} /></span>
-              <p><strong>작은 단서도 도움이 돼요.</strong><br />색상이나 부착물처럼 기억나는 특징을 입력해 보세요.</p>
-            </div>
-          </aside>
-
-          <section className="results-area" aria-label="검색 결과">
+        <section className="results-area" aria-label="습득물 목록">
             <div className="results-toolbar">
               <div className="results-count">
                 <strong>{items.length}</strong><span>개의 습득물이 있어요</span>
               </div>
-              <span className="sort-indicator"><CalendarDays size={15} /> 습득일 최신순</span>
+              <span className="sort-indicator"><CalendarDays size={15} /> 습득일순</span>
             </div>
 
             {notice && <p className="notice-banner" role="status"><Check size={16} />{notice}</p>}
@@ -392,6 +370,11 @@ export default function Home() {
                         <h3>{item.title}</h3>
                         <p className="item-description">{item.description}</p>
                         <div className="item-location"><MapPin size={15} /><span>{item.location}</span></div>
+                        {item.isOwner && (
+                          <button className="item-delete" aria-label={`${item.title} 게시물 삭제`} onClick={() => { setDeleteError(""); setDeleteTarget(item); }}>
+                            <Trash2 size={14} /> 게시물 삭제
+                          </button>
+                        )}
                       </div>
                     </article>
                   );
@@ -399,24 +382,16 @@ export default function Home() {
               </div>
             ) : (
               <div className="empty-state">
-                <div className="empty-illustration"><PackageSearch size={38} strokeWidth={1.4} /><span>?</span></div>
-                <p className="empty-kicker">NOTHING HERE, YET</p>
-                <h3>아직 찾는 결과가 없어요.</h3>
-                <p>검색 조건을 바꾸거나 첫 습득물을 등록해 보세요.</p>
+                <PackageSearch className="empty-icon" size={28} strokeWidth={1.6} />
+                <h3>조건에 맞는 습득물이 없습니다.</h3>
                 <div className="section-actions">
                   <button className="button button-outline" onClick={() => setIsLostReportOpen(true)}><CircleHelp size={16} /> 분실 신고</button>
                   <button className="button button-primary" onClick={openRegistration}><Plus size={16} /> 습득물 등록</button>
                 </div>
               </div>
             )}
-          </section>
-        </div>
+        </section>
       </div>
-
-      <footer className="page-footer">
-        <span>찾았어요 <span className="footer-dot">●</span> 함께 찾는 캠퍼스</span>
-        <span>LOST IS TEMPORARY. FOUND IS TOGETHER.</span>
-      </footer>
 
       {isRegisterOpen && (
         <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setIsRegisterOpen(false)}>
@@ -493,6 +468,28 @@ export default function Home() {
         </div>
       )}
       {isLostReportOpen && <LostReportForm onClose={() => setIsLostReportOpen(false)} />}
+      {deleteTarget && (
+        <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setDeleteTarget(null)}>
+          <section className="registration-dialog delete-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-item-title">
+            <div className="dialog-header">
+              <div>
+                <p className="section-kicker">게시물 관리</p>
+                <h2 id="delete-item-title">게시물을 삭제할까요?</h2>
+              </div>
+              <button className="icon-button" type="button" onClick={() => setDeleteTarget(null)} aria-label="삭제 확인 창 닫기"><X size={20} /></button>
+            </div>
+            <p className="dialog-intro">삭제하면 목록과 검색 결과에서 사라집니다. 이 작업은 되돌릴 수 없습니다.</p>
+            {deleteError && <p className="form-error" role="alert"><AlertCircle size={16} />{deleteError}</p>}
+            <div className="dialog-actions">
+              <button className="button button-quiet" type="button" onClick={() => setDeleteTarget(null)}>취소</button>
+              <button className="button button-danger" type="button" onClick={deleteItem} disabled={isDeletingItem}>
+                {isDeletingItem ? <LoaderCircle className="spin" size={16} /> : <Trash2 size={16} />}
+                {isDeletingItem ? "삭제 중" : "삭제"}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </main>
   );
 }

@@ -44,6 +44,11 @@ function formatDate(value: string): string {
 export default function LostReportMatchesView({ reportId }: LostReportMatchesViewProps) {
   const [data, setData] = useState<MatchResponse | null>(null);
   const [selectedMatch, setSelectedMatch] = useState<LostItemMatch | null>(null);
+  const [resolvedItemIds, setResolvedItemIds] = useState<string[]>([]);
+  const [confirmResolve, setConfirmResolve] = useState(false);
+  const [isResolving, setIsResolving] = useState(false);
+  const [actionError, setActionError] = useState("");
+  const [notice, setNotice] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -70,6 +75,36 @@ export default function LostReportMatchesView({ reportId }: LostReportMatchesVie
     };
   }, [reportId]);
 
+  async function markItemFound() {
+    if (!selectedMatch) return;
+    setIsResolving(true);
+    setActionError("");
+
+    try {
+      const response = await fetch(`/api/lost-reports/${encodeURIComponent(reportId)}/resolve`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ itemId: selectedMatch.itemId }),
+      });
+      if (!response.ok) throw new Error("게시물을 완료 처리할 수 없습니다.");
+
+      const resolvedId = selectedMatch.itemId;
+      setResolvedItemIds((current) => [...current, resolvedId]);
+      setData((current) => current
+        ? { ...current, matches: current.matches.filter((match) => match.itemId !== resolvedId) }
+        : current);
+      setSelectedMatch(null);
+      setConfirmResolve(false);
+      setNotice("찾은 물건을 습득물 목록에서 숨겼습니다.");
+    } catch (requestError) {
+      setActionError(requestError instanceof Error ? requestError.message : "완료 처리에 실패했습니다.");
+    } finally {
+      setIsResolving(false);
+    }
+  }
+
+  const visibleMatches = data?.matches.filter((match) => !resolvedItemIds.includes(match.itemId)) ?? [];
+
   return (
     <main className="app-shell match-page">
       <header className="topbar">
@@ -91,7 +126,7 @@ export default function LostReportMatchesView({ reportId }: LostReportMatchesVie
           </div>
           <div className="intro-summary" aria-label="매칭 후보 수">
             <span className="summary-label">매칭 후보</span>
-            <strong>{data?.matches.length.toString().padStart(2, "0") ?? "--"}</strong>
+            <strong>{data ? visibleMatches.length.toString().padStart(2, "0") : "--"}</strong>
             <span className="summary-foot">POSSIBLE MATCHES</span>
           </div>
         </div>
@@ -99,6 +134,7 @@ export default function LostReportMatchesView({ reportId }: LostReportMatchesVie
 
       <div className="content-wrap match-content">
         <Link className="back-link" href="/"><ArrowLeft size={15} /> 게시판으로 돌아가기</Link>
+      {notice && <p className="notice-banner" role="status"><Check size={16} />{notice}</p>}
         {isLoading ? (
           <div className="loading-state" role="status"><LoaderCircle className="spin" size={27} /><span>매칭 결과를 불러오는 중</span></div>
         ) : error ? (
@@ -127,14 +163,14 @@ export default function LostReportMatchesView({ reportId }: LostReportMatchesVie
             <div className="match-section-heading">
               <div>
                 <p className="section-kicker">FOUND ITEMS · 30 DAYS</p>
-                <h2>비슷한 습득물 <span>{data.matches.length}</span></h2>
+                <h2>비슷한 습득물 <span>{visibleMatches.length}</span></h2>
               </div>
               <span className="match-sort"><SearchCheck size={16} /> 관련도순</span>
             </div>
 
-            {data.matches.length > 0 ? (
+            {visibleMatches.length > 0 ? (
               <div className="item-grid match-grid">
-                {data.matches.map((match, index) => (
+                {visibleMatches.map((match, index) => (
                   <article className="item-card match-card" key={match.itemId} style={{ "--card-index": index } as React.CSSProperties}>
                     <div className="item-image">
                       {match.thumbnailUrl ? (
@@ -215,9 +251,24 @@ export default function LostReportMatchesView({ reportId }: LostReportMatchesVie
                 {selectedMatch.reasons.map((reason) => <span key={reason}><Check size={14} />{reason}</span>)}
               </div>
             </div>
-            <div className="dialog-actions">
-              <button className="button button-primary" type="button" onClick={() => setSelectedMatch(null)}>확인</button>
-            </div>
+            {actionError && <p className="form-error" role="alert">{actionError}</p>}
+            {confirmResolve ? (
+              <div className="resolve-confirm">
+                <p>확인하면 이 습득물 게시물이 전체 목록에서 사라집니다.</p>
+                <div className="dialog-actions">
+                  <button className="button button-quiet" type="button" onClick={() => setConfirmResolve(false)}>취소</button>
+                  <button className="button button-primary" type="button" onClick={markItemFound} disabled={isResolving}>
+                    {isResolving ? <LoaderCircle className="spin" size={16} /> : <Check size={16} />}
+                    {isResolving ? "처리 중" : "목록에서 숨기기"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="dialog-actions match-dialog-actions">
+                <button className="button button-outline" type="button" onClick={() => setConfirmResolve(true)}>찾았어요</button>
+                <button className="button button-primary" type="button" onClick={() => setSelectedMatch(null)}>닫기</button>
+              </div>
+            )}
           </section>
         </div>
       )}

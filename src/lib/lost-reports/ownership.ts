@@ -21,3 +21,7 @@ export function verifyReportOwnerToken(token: string | undefined, storedHash: st
 export function reportOwnerCookieName(reportId: string): string {
   return `lost-report-owner-${reportId}`;
 }
+
+export function lostItemOwnerCookieName(itemId: string): string {
+  return `lost-item-owner-${itemId}`;
+}
