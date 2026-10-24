@@ -1,6 +1,6 @@
 # 구현 계획: 습득물 등록 및 검색
 
-상태: 승인됨 (TASK-1 완료, TASK-2 대기)
+상태: 완료 (TASK-1~TASK-7)
 
 ## 명세 참조
 - `specs/lost-item-registration-search/spec.md`
