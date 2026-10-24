@@ -48,6 +48,14 @@ const categoryIcons: Record<ItemCategory, LucideIcon> = {
   "열쇠/기타": KeyRound,
   "기타 물품": Shapes,
 };
+const categoryClassNames: Record<ItemCategory, string> = {
+  전자기기: "electronics",
+  "지갑/카드": "wallet-card",
+  "학용품/도서": "school-supplies",
+  "의류/잡화": "clothing-accessories",
+  "열쇠/기타": "keys-misc",
+  "기타 물품": "other",
+};
 
 const emptyFilters: SearchFilters = { keyword: "", location: "", category: "" };
 const emptyFields: RegistrationFields = {
@@ -359,7 +367,7 @@ export default function Home() {
                             unoptimized
                           />
                         ) : (
-                          <div className={`image-placeholder placeholder-${item.category}`}>
+                          <div className={`image-placeholder placeholder-${categoryClassNames[item.category]}`}>
                             <span className="placeholder-orbit" />
                             <Icon size={34} strokeWidth={1.5} />
                             <span>사진 미등록</span>
@@ -369,7 +377,7 @@ export default function Home() {
                         {item.photoPaths.length > 1 && <span className="photo-count">+{item.photoPaths.length - 1}</span>}
                       </div>
                       <div className="item-card-body">
-                        <span className={`item-category category-text-${item.category}`}>{item.category}</span>
+                        <span className={`item-category category-text-${categoryClassNames[item.category]}`}>{item.category}</span>
                         <h3>{item.title}</h3>
                         <p className="item-description">{item.description}</p>
                         <div className="item-location"><MapPin size={15} /><span>{item.location}</span></div>

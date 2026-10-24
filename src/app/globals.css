@@ -1,6 +1,3 @@
-@import url("@fontsource-variable/noto-sans-kr");
-@import url("@fontsource-variable/space-grotesk");
-
 :root {
   --ink: #183c32;
   --ink-soft: #405d52;
@@ -155,11 +152,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .image-placeholder { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; overflow: hidden; color: #52715d; background: linear-gradient(140deg, #e7f0e6, #d9e9df); }
 .image-placeholder > svg { position: relative; z-index: 1; }
 .image-placeholder > span:last-child { position: relative; z-index: 1; color: #6b8373; font-size: 10px; font-weight: 650; }
-.placeholder-지갑\/카드 { color: #99704b; background: linear-gradient(140deg, #f6eee1, #eadbc9); }
-.placeholder-학용품\/도서 { color: #55789c; background: linear-gradient(140deg, #e7f0f6, #d7e6f0); }
-.placeholder-의류\/잡화 { color: #ad6668; background: linear-gradient(140deg, #f8e9e6, #eedbd7); }
-.placeholder-열쇠\/기타 { color: #76699a; background: linear-gradient(140deg, #efebf5, #e1ddef); }
-.placeholder-기타\ 물품 { color: #59786d; background: linear-gradient(140deg, #e9f0eb, #dce8e1); }
+.placeholder-wallet-card { color: #99704b; background: linear-gradient(140deg, #f6eee1, #eadbc9); }
+.placeholder-school-supplies { color: #55789c; background: linear-gradient(140deg, #e7f0f6, #d7e6f0); }
+.placeholder-clothing-accessories { color: #ad6668; background: linear-gradient(140deg, #f8e9e6, #eedbd7); }
+.placeholder-keys-misc { color: #76699a; background: linear-gradient(140deg, #efebf5, #e1ddef); }
+.placeholder-other { color: #59786d; background: linear-gradient(140deg, #e9f0eb, #dce8e1); }
 .placeholder-orbit { position: absolute; top: 50%; left: 50%; width: 128px; height: 128px; border: 1px solid rgb(255 255 255 / 70%); border-radius: 50%; transform: translate(-50%, -55%); }
 .placeholder-orbit::before, .placeholder-orbit::after { position: absolute; inset: 13px; content: ""; border: 1px solid rgb(255 255 255 / 55%); border-radius: 50%; }
 .placeholder-orbit::after { inset: 27px; }
@@ -167,11 +164,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .photo-count { position: absolute; top: 10px; right: 10px; z-index: 2; padding: 3px 7px; color: white; background: rgb(20 54 43 / 78%); border-radius: 4px; font-size: 10px; }
 .item-card-body { padding: 13px 14px 14px; }
 .item-category { display: inline-block; padding: 3px 7px; border-radius: 3px; color: #24624c; background: #e9f2e5; font-size: 9px; font-weight: 800; }
-.category-text-지갑\/카드 { color: #936038; background: #f8eee2; }
-.category-text-학용품\/도서 { color: #4d7294; background: #eaf2f8; }
-.category-text-의류\/잡화 { color: #a45459; background: #faece9; }
-.category-text-열쇠\/기타 { color: #726092; background: #f0ecf7; }
-.category-text-기타\ 물품 { color: #547266; background: #e8f0eb; }
+.category-text-wallet-card { color: #936038; background: #f8eee2; }
+.category-text-school-supplies { color: #4d7294; background: #eaf2f8; }
+.category-text-clothing-accessories { color: #a45459; background: #faece9; }
+.category-text-keys-misc { color: #726092; background: #f0ecf7; }
+.category-text-other { color: #547266; background: #e8f0eb; }
 .item-card h3 { margin: 8px 0 4px; overflow: hidden; color: #203e32; font-size: 16px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
 .item-description { min-height: 42px; margin: 0; display: -webkit-box; overflow: hidden; color: #758078; font-size: 11px; line-height: 1.75; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .item-location { margin-top: 12px; padding-top: 10px; display: flex; align-items: center; gap: 6px; border-top: 1px solid #edf1ed; color: #557161; font-size: 11px; }
@@ -250,8 +247,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .brand-mark { width: 33px; height: 33px; }
   .brand-name { font-size: 15px; }
   .brand-divider, .brand-subtitle, .open-status { display: none; }
-  .topbar-actions { gap: 0; }
-  .header-register { min-height: 38px; padding: 0 11px; font-size: 11px; }
+  .topbar-actions { display: none; }
   .intro-inner { min-height: 214px; padding: 29px 21px 27px; }
   .intro-copy h1 { font-size: 30px; }
   .intro-caption { max-width: 280px; font-size: 11px; }
@@ -267,12 +263,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .mobile-register { min-height: 35px; display: inline-flex; padding: 0 10px; font-size: 10px; }
   .board-layout { grid-template-columns: 1fr; gap: 17px; }
   .filter-panel { position: static; padding: 15px; }
-  .filter-panel form { display: grid; grid-template-columns: 1fr 1fr; column-gap: 12px; }
-  .filter-title-row { grid-column: 1 / -1; margin-bottom: 12px; }
-  .filter-panel .field-hint { grid-column: 1; margin-bottom: 0; }
-  .location-label { grid-column: 2; grid-row: 2; }
-  .location-label + .input-with-icon { grid-column: 2; grid-row: 3; }
-  .category-filter-heading, .category-options, .filter-submit { grid-column: 1 / -1; }
+  .filter-panel form { display: block; }
+  .filter-title-row { margin-bottom: 13px; }
+  .filter-panel .field-hint { margin: 6px 0 13px; }
+  .location-label { margin-top: 0; }
+  .category-filter-heading, .category-options, .filter-submit { grid-column: auto; }
   .category-filter-heading { margin-top: 13px; }
   .category-options { grid-template-columns: 1fr 1fr; column-gap: 5px; }
   .category-option { min-height: 34px; gap: 6px; padding-inline: 5px; font-size: 10px; }
