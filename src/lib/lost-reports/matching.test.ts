@@ -19,6 +19,7 @@ function foundItem(overrides: Partial<LostItemRecord> = {}): LostItemRecord {
     description: "검은색 파란 케이스",
     foundDate: "2026-10-01",
     photoPaths: ["image.png"],
+    custodyStatus: "held_by_finder",
     createdAt: "2026-10-01T10:00:00.000Z",
     ...overrides,
   };

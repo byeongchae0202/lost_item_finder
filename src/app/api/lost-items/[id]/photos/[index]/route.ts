@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { getLostItem } from "@/lib/lost-items/database";
+import { getLostItemUploadDirectory } from "@/lib/lost-items/data-paths";
 
 const photoPattern = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}\.(jpg|png|webp)$/i;
 const contentTypes = {
@@ -26,7 +27,7 @@ export async function GET(
   }
 
   try {
-    const bytes = await readFile(path.join(process.cwd(), "data", "uploads", filename));
+    const bytes = await readFile(path.join(/*turbopackIgnore: true*/ getLostItemUploadDirectory(), filename));
     const extension = filename.slice(filename.lastIndexOf(".") + 1).toLowerCase() as keyof typeof contentTypes;
     return new Response(bytes, {
       headers: {

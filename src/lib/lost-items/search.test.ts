@@ -11,6 +11,7 @@ const items: LostItemRecord[] = [
     description: "검은색 라이언 키링 부착",
     foundDate: "2026-10-20",
     photoPaths: [],
+    custodyStatus: "held_by_finder",
     createdAt: "2026-10-20T10:00:00.000Z",
   },
   {
@@ -21,6 +22,7 @@ const items: LostItemRecord[] = [
     description: "학생증 포함",
     foundDate: "2026-10-21",
     photoPaths: [],
+    custodyStatus: "held_by_finder",
     createdAt: "2026-10-21T10:00:00.000Z",
   },
 ];

@@ -4,6 +4,7 @@ import path from "node:path";
 import Database from "better-sqlite3";
 import type { ItemCategory } from "./categories";
 import { DEFAULT_LOST_ITEM_CUSTODY_STATUS, type LostItemCustodyStatus } from "./custody-status";
+import { getLostItemDataDirectory } from "./data-paths";
 import type { CreateLostItemInput, CreateLostReportInput } from "./validation";
 
 export type LostItemRecord = CreateLostItemInput & {
@@ -116,7 +117,7 @@ export function getLostItemsDatabase(): Database.Database {
     return globalWithLostItemsDatabase.lostItemsDatabase;
   }
 
-  const dataDirectory = path.join(process.cwd(), "data");
+  const dataDirectory = getLostItemDataDirectory();
   mkdirSync(dataDirectory, { recursive: true });
 
   const database = new Database(path.join(dataDirectory, "lost-items.sqlite"));

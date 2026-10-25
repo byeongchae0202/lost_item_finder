@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileTypeFromBuffer } from "file-type";
+import { getLostItemUploadDirectory } from "./data-paths";
 import { LostItemValidationError } from "./validation";
 
 export const MAX_PHOTO_COUNT = 3;
@@ -51,14 +52,14 @@ export async function validatePhotoFiles(files: File[]): Promise<ValidatedPhoto[
 }
 
 export async function storePhotoFiles(photos: ValidatedPhoto[]): Promise<string[]> {
-  const uploadDirectory = path.join(process.cwd(), "data", "uploads");
+  const uploadDirectory = getLostItemUploadDirectory();
   await mkdir(uploadDirectory, { recursive: true });
 
   const storedNames: string[] = [];
   try {
     for (const photo of photos) {
       const filename = `${randomUUID()}.${photo.extension}`;
-      await writeFile(path.join(uploadDirectory, filename), photo.bytes, { flag: "wx" });
+      await writeFile(path.join(/*turbopackIgnore: true*/ uploadDirectory, filename), photo.bytes, { flag: "wx" });
       storedNames.push(filename);
     }
     return storedNames;
@@ -72,7 +73,7 @@ export async function deleteStoredPhotoFiles(filenames: string[]): Promise<void>
   await Promise.all(
     filenames.map(async (filename) => {
       try {
-        await unlink(path.join(process.cwd(), "data", "uploads", filename));
+        await unlink(path.join(/*turbopackIgnore: true*/ getLostItemUploadDirectory(), filename));
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
           throw error;

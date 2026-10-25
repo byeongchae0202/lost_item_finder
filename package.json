@@ -19,6 +19,9 @@
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },
+  "allowScripts": {
+    "better-sqlite3": true
+  },
   "devDependencies": {
     "@testing-library/dom": "^10.4.2",
     "@testing-library/react": "^16.3.3",
