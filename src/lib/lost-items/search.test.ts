@@ -36,6 +36,23 @@ describe("searchLostItems", () => {
     expect(searchLostItems(items, { category: "지갑/카드" })).toEqual([items[1]]);
   });
 
+  it("matches English item names when the query is Korean and vice versa", () => {
+    const englishListing = {
+      ...items[0],
+      title: "iPad Air",
+      description: "Apple Pencil and blue case",
+    };
+    const koreanListing = {
+      ...items[1],
+      title: "에어팟 프로",
+      description: "검정색 케이스",
+    };
+
+    expect(searchLostItems([englishListing], { keyword: "아이패드 에어" })).toEqual([englishListing]);
+    expect(searchLostItems([koreanListing], { keyword: "airpods pro" })).toEqual([koreanListing]);
+    expect(searchLostItems([englishListing], { keyword: "애플펜슬" })).toEqual([englishListing]);
+  });
+
   it("requires every keyword while matching each across title, description, or location", () => {
     expect(searchLostItems(items, { keyword: "키보드 제1공학관" })).toEqual([
       items[0],
