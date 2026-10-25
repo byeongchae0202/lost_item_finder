@@ -49,6 +49,17 @@ describe("parseCreateLostItemInput", () => {
     ).toThrow("category must be a supported category.");
   });
 
+  it("defaults and accepts the four supported custody statuses", () => {
+    expect(parseCreateLostItemInput(validInput, "2026-10-24").custodyStatus).toBe("held_by_finder");
+    for (const custodyStatus of ["held_by_finder", "department_office", "student_union_office", "returned"]) {
+      expect(parseCreateLostItemInput({ ...validInput, custodyStatus }, "2026-10-24").custodyStatus)
+        .toBe(custodyStatus);
+    }
+    expect(() =>
+      parseCreateLostItemInput({ ...validInput, custodyStatus: "lost" }, "2026-10-24"),
+    ).toThrow("custodyStatus is not supported.");
+  });
+
   it("rejects invalid calendar dates", () => {
     expect(() =>
       parseCreateLostItemInput({ ...validInput, foundDate: "2026-02-30" }, "2026-10-24"),

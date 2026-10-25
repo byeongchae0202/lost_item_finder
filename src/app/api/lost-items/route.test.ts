@@ -96,7 +96,7 @@ describe("lost items route", () => {
 
     expect(response.status).toBe(201);
     expect(createLostItemMock).toHaveBeenCalledWith(
-      validInput,
+      { ...validInput, custodyStatus: "held_by_finder" },
       [],
       expect.stringMatching(/^[a-f\d]{64}$/),
     );
@@ -131,7 +131,7 @@ describe("lost items route", () => {
     expect(response.status).toBe(201);
     expect(validatePhotoFilesMock).toHaveBeenCalledWith([expect.any(File)]);
     expect(createLostItemMock).toHaveBeenCalledWith(
-      validInput,
+      { ...validInput, custodyStatus: "held_by_finder" },
       ["generated.png"],
       expect.stringMatching(/^[a-f\d]{64}$/),
     );

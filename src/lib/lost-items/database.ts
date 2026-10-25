@@ -3,11 +3,13 @@ import { mkdirSync } from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
 import type { ItemCategory } from "./categories";
+import { DEFAULT_LOST_ITEM_CUSTODY_STATUS, type LostItemCustodyStatus } from "./custody-status";
 import type { CreateLostItemInput, CreateLostReportInput } from "./validation";
 
 export type LostItemRecord = CreateLostItemInput & {
   id: string;
   photoPaths: string[];
+  custodyStatus: LostItemCustodyStatus;
   createdAt: string;
 };
 
@@ -31,6 +33,7 @@ type LostItemRow = {
   photo_paths: string;
   owner_token_hash: string | null;
   status: "available" | "resolved";
+  custody_status: LostItemCustodyStatus;
   created_at: string;
 };
 
@@ -64,6 +67,7 @@ export function initializeLostItemsDatabase(database: Database.Database): void {
       photo_paths TEXT NOT NULL DEFAULT '[]',
       owner_token_hash TEXT,
       status TEXT NOT NULL DEFAULT 'available',
+      custody_status TEXT NOT NULL DEFAULT 'held_by_finder',
       created_at TEXT NOT NULL
     );
 
@@ -93,6 +97,12 @@ export function initializeLostItemsDatabase(database: Database.Database): void {
   if (!columnNames.has("status")) {
     database.exec("ALTER TABLE lost_items ADD COLUMN status TEXT NOT NULL DEFAULT 'available'");
   }
+  if (!columnNames.has("custody_status")) {
+    database.exec("ALTER TABLE lost_items ADD COLUMN custody_status TEXT NOT NULL DEFAULT 'held_by_finder'");
+  }
+  database.exec(
+    "UPDATE lost_items SET custody_status = 'returned' WHERE status = 'resolved' AND custody_status = 'held_by_finder'",
+  );
 }
 
 export function getLostItemsDatabase(): Database.Database {
@@ -121,6 +131,7 @@ function mapLostItem(row: LostItemRow): LostItemRecord {
     description: row.description,
     foundDate: row.found_date,
     photoPaths: JSON.parse(row.photo_paths) as string[],
+    custodyStatus: row.custody_status ?? DEFAULT_LOST_ITEM_CUSTODY_STATUS,
     createdAt: row.created_at,
   };
 }
@@ -128,16 +139,23 @@ function mapLostItem(row: LostItemRow): LostItemRecord {
 export function insertLostItem(
   database: Database.Database,
   input: CreateLostItemInput,
-  options: { createdAt?: string; photoPaths?: string[]; ownerTokenHash?: string } = {},
+  options: {
+    createdAt?: string;
+    photoPaths?: string[];
+    ownerTokenHash?: string;
+    custodyStatus?: LostItemCustodyStatus;
+  } = {},
 ): LostItemRecord {
   const id = randomUUID();
   const createdAt = options.createdAt ?? new Date().toISOString();
   const photoPaths = options.photoPaths ?? [];
+  const custodyStatus = options.custodyStatus ?? input.custodyStatus ?? DEFAULT_LOST_ITEM_CUSTODY_STATUS;
+  const visibilityStatus = custodyStatus === "returned" ? "resolved" : "available";
   database
     .prepare(
       `INSERT INTO lost_items
-        (id, title, category, location, description, found_date, photo_paths, owner_token_hash, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        (id, title, category, location, description, found_date, photo_paths, owner_token_hash, status, custody_status, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       id,
@@ -148,6 +166,8 @@ export function insertLostItem(
       input.foundDate,
       JSON.stringify(photoPaths),
       options.ownerTokenHash ?? null,
+      visibilityStatus,
+      custodyStatus,
       createdAt,
     );
 
@@ -164,7 +184,7 @@ export function insertLostItem(
 
 export function listLostItems(database: Database.Database): LostItemRecord[] {
   const rows = database
-    .prepare("SELECT * FROM lost_items WHERE status = 'available' ORDER BY found_date DESC, created_at DESC")
+    .prepare("SELECT * FROM lost_items WHERE status = 'available' AND custody_status != 'returned' ORDER BY found_date DESC, created_at DESC")
     .all() as LostItemRow[];
 
   return rows.map(mapLostItem);
@@ -172,7 +192,15 @@ export function listLostItems(database: Database.Database): LostItemRecord[] {
 
 export function getLostItemById(database: Database.Database, id: string): LostItemRecord | null {
   const row = database
-    .prepare("SELECT * FROM lost_items WHERE id = ? AND status = 'available'")
+    .prepare("SELECT * FROM lost_items WHERE id = ? AND status = 'available' AND custody_status != 'returned'")
+    .get(id) as LostItemRow | undefined;
+
+  return row ? mapLostItem(row) : null;
+}
+
+export function getLostItemDetailsById(database: Database.Database, id: string): LostItemRecord | null {
+  const row = database
+    .prepare("SELECT * FROM lost_items WHERE id = ?")
     .get(id) as LostItemRow | undefined;
 
   return row ? mapLostItem(row) : null;
@@ -196,10 +224,28 @@ export function getLostItem(id: string): LostItemRecord | null {
 
 export function getLostItemOwnerTokenHash(id: string): string | null {
   const row = getLostItemsDatabase()
-    .prepare("SELECT owner_token_hash FROM lost_items WHERE id = ? AND status = 'available'")
+    .prepare("SELECT owner_token_hash FROM lost_items WHERE id = ?")
     .get(id) as { owner_token_hash: string | null } | undefined;
 
   return row?.owner_token_hash ?? null;
+}
+
+export function updateOwnedLostItemCustodyStatus(
+  database: Database.Database,
+  id: string,
+  ownerTokenHash: string,
+  custodyStatus: LostItemCustodyStatus,
+): boolean {
+  const visibilityStatus = custodyStatus === "returned" ? "resolved" : "available";
+  const result = database
+    .prepare(
+      `UPDATE lost_items
+       SET custody_status = ?, status = ?
+       WHERE id = ? AND owner_token_hash = ? AND status = 'available'`,
+    )
+    .run(custodyStatus, visibilityStatus, id, ownerTokenHash);
+
+  return result.changes > 0;
 }
 
 export function resolveLostItemById(database: Database.Database, id: string): string[] | null {
@@ -209,7 +255,7 @@ export function resolveLostItemById(database: Database.Database, id: string): st
   if (!row) return null;
 
   const result = database
-    .prepare("UPDATE lost_items SET status = 'resolved' WHERE id = ? AND status = 'available'")
+    .prepare("UPDATE lost_items SET status = 'resolved', custody_status = 'returned' WHERE id = ? AND status = 'available'")
     .run(id);
   return result.changes > 0 ? (JSON.parse(row.photo_paths) as string[]) : null;
 }
@@ -252,7 +298,7 @@ export function resolveLostItemForReport(
     if (!row) return null;
 
     const result = database
-      .prepare("UPDATE lost_items SET status = 'resolved' WHERE id = ? AND status = 'available'")
+      .prepare("UPDATE lost_items SET status = 'resolved', custody_status = 'returned' WHERE id = ? AND status = 'available'")
       .run(id);
     return result.changes > 0 ? (JSON.parse(row.photo_paths) as string[]) : null;
   });

@@ -2,12 +2,14 @@ import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   deleteOwnedLostItem,
+  getLostItemDetailsById,
   getLostItemById,
   initializeLostItemsDatabase,
   insertLostReport,
   insertLostItem,
   listLostItems,
   resolveLostItemForReport,
+  updateOwnedLostItemCustodyStatus,
 } from "./database";
 import { searchLostItems } from "./search";
 
@@ -93,6 +95,49 @@ describe("lost item database", () => {
     expect(reportTable).toBeTruthy();
     expect(lostItemColumns.map((column) => column.name)).toContain("owner_token_hash");
     expect(lostItemColumns.map((column) => column.name)).toContain("status");
+    expect(lostItemColumns.map((column) => column.name)).toContain("custody_status");
+  });
+
+  it("stores owner-edited custody status and hides returned items", () => {
+    const item = insertLostItem(
+      database,
+      {
+        title: "검정색 지갑",
+        category: "지갑/카드",
+        location: "중앙 도서관",
+        description: "학생증 포함",
+        foundDate: "2000-01-01",
+      },
+      { ownerTokenHash: "owner-hash" },
+    );
+
+    expect(item.custodyStatus).toBe("held_by_finder");
+    expect(updateOwnedLostItemCustodyStatus(database, item.id, "wrong-hash", "department_office")).toBe(false);
+    expect(updateOwnedLostItemCustodyStatus(database, item.id, "owner-hash", "department_office")).toBe(true);
+    expect(getLostItemById(database, item.id)?.custodyStatus).toBe("department_office");
+    expect(updateOwnedLostItemCustodyStatus(database, item.id, "owner-hash", "returned")).toBe(true);
+    expect(listLostItems(database)).toEqual([]);
+    expect(getLostItemById(database, item.id)).toBeNull();
+    expect(getLostItemDetailsById(database, item.id)?.custodyStatus).toBe("returned");
+  });
+
+  it("maps previously resolved posts to the completed custody status", () => {
+    const item = insertLostItem(
+      database,
+      {
+        title: "기존 완료 항목",
+        category: "기타 물품",
+        location: "안내데스크",
+        description: "이전 완료 상태",
+        foundDate: "2000-01-01",
+      },
+    );
+    database.prepare("UPDATE lost_items SET status = 'resolved' WHERE id = ?").run(item.id);
+
+    initializeLostItemsDatabase(database);
+
+    expect(getLostItemDetailsById(database, item.id)?.custodyStatus).toBe("returned");
+    expect(listLostItems(database)).toEqual([]);
   });
 
   it("deletes a found item only when the owner token hash matches", () => {

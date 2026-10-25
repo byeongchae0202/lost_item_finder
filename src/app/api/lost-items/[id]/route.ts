@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   deleteOwnedLostItem,
+  getLostItem,
+  getLostItemDetailsById,
   getLostItemOwnerTokenHash,
   getLostItemsDatabase,
+  updateOwnedLostItemCustodyStatus,
 } from "@/lib/lost-items/database";
 import { deleteStoredPhotoFiles } from "@/lib/lost-items/photos";
+import { isLostItemCustodyStatus } from "@/lib/lost-items/custody-status";
 import {
   lostItemOwnerCookieName,
   verifyReportOwnerToken,
@@ -16,6 +20,82 @@ function notFoundResponse() {
   return NextResponse.json(
     { error: "Lost item not found." },
     { status: 404, headers: { "Cache-Control": "no-store" } },
+  );
+}
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
+  if (!itemIdPattern.test(id)) return notFoundResponse();
+
+  const item = getLostItemDetailsById(getLostItemsDatabase(), id);
+  if (!item) return notFoundResponse();
+  const ownerToken = request.cookies.get(lostItemOwnerCookieName(id))?.value;
+  const ownerTokenHash = getLostItemOwnerTokenHash(id) ?? "";
+
+  return NextResponse.json(
+    {
+      ...item,
+      photoPaths: item.custodyStatus === "returned" ? [] : item.photoPaths,
+      isOwner: verifyReportOwnerToken(ownerToken, ownerTokenHash),
+    },
+    { headers: { "Cache-Control": "no-store", Vary: "Cookie" } },
+  );
+}
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
+  if (!itemIdPattern.test(id)) return notFoundResponse();
+
+  const ownerToken = request.cookies.get(lostItemOwnerCookieName(id))?.value;
+  const ownerTokenHash = getLostItemOwnerTokenHash(id);
+  if (!verifyReportOwnerToken(ownerToken, ownerTokenHash ?? "")) return notFoundResponse();
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Request body must be valid JSON." }, { status: 400 });
+  }
+
+  if (typeof body !== "object" || body === null || typeof (body as { custodyStatus?: unknown }).custodyStatus !== "string") {
+    return NextResponse.json({ error: "custodyStatus is required." }, { status: 400 });
+  }
+
+  const custodyStatus = (body as { custodyStatus: string }).custodyStatus;
+  if (!isLostItemCustodyStatus(custodyStatus)) {
+    return NextResponse.json({ error: "custodyStatus is not supported." }, { status: 400 });
+  }
+
+  const item = getLostItem(id);
+  if (!item || !ownerTokenHash) return notFoundResponse();
+  const updated = updateOwnedLostItemCustodyStatus(
+    getLostItemsDatabase(),
+    id,
+    ownerTokenHash,
+    custodyStatus,
+  );
+  if (!updated) return notFoundResponse();
+
+  if (custodyStatus === "returned" && item.photoPaths.length > 0) {
+    try {
+      await deleteStoredPhotoFiles(item.photoPaths);
+    } catch {
+      return NextResponse.json(
+        { error: "Status was updated, but stored photos could not be cleaned up." },
+        { status: 500, headers: { "Cache-Control": "no-store" } },
+      );
+    }
+  }
+
+  return NextResponse.json(
+    { id, custodyStatus },
+    { headers: { "Cache-Control": "no-store" } },
   );
 }
 

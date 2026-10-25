@@ -27,6 +27,11 @@ import type { LucideIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ITEM_CATEGORIES, type ItemCategory } from "@/lib/lost-items/categories";
 import type { LostItemRecord } from "@/lib/lost-items/database";
+import {
+  DEFAULT_LOST_ITEM_CUSTODY_STATUS,
+  LOST_ITEM_CUSTODY_STATUSES,
+  type LostItemCustodyStatus,
+} from "@/lib/lost-items/custody-status";
 import LostReportForm from "./lost-report-form";
 
 type SearchFilters = {
@@ -43,6 +48,7 @@ type RegistrationFields = {
   location: string;
   description: string;
   foundDate: string;
+  custodyStatus: LostItemCustodyStatus;
 };
 
 const categoryIcons: Record<ItemCategory, LucideIcon> = {
@@ -69,6 +75,7 @@ const emptyFields: RegistrationFields = {
   location: "",
   description: "",
   foundDate: "",
+  custodyStatus: DEFAULT_LOST_ITEM_CUSTODY_STATUS,
 };
 
 function localDateValue(date = new Date()): string {
@@ -102,6 +109,10 @@ export default function Home() {
   const [deleteTarget, setDeleteTarget] = useState<ListedLostItem | null>(null);
   const [isDeletingItem, setIsDeletingItem] = useState(false);
   const [deleteError, setDeleteError] = useState("");
+  const [statusEditItem, setStatusEditItem] = useState<ListedLostItem | null>(null);
+  const [statusEditValue, setStatusEditValue] = useState<LostItemCustodyStatus>(DEFAULT_LOST_ITEM_CUSTODY_STATUS);
+  const [isSavingStatus, setIsSavingStatus] = useState(false);
+  const [statusError, setStatusError] = useState("");
   const [error, setError] = useState("");
   const [formError, setFormError] = useState("");
   const [notice, setNotice] = useState("");
@@ -231,6 +242,35 @@ export default function Home() {
       setDeleteError(requestError instanceof Error ? requestError.message : "삭제에 실패했습니다.");
     } finally {
       setIsDeletingItem(false);
+    }
+  }
+
+  async function saveCustodyStatus() {
+    if (!statusEditItem) return;
+    setIsSavingStatus(true);
+    setStatusError("");
+
+    try {
+      const response = await fetch(`/api/lost-items/${statusEditItem.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ custodyStatus: statusEditValue }),
+      });
+      if (!response.ok) throw new Error("보관 상태를 변경할 수 없습니다.");
+
+      if (statusEditValue === "returned") {
+        setItems((current) => current.filter((item) => item.id !== statusEditItem.id));
+      } else {
+        setItems((current) => current.map((item) => item.id === statusEditItem.id
+          ? { ...item, custodyStatus: statusEditValue }
+          : item));
+      }
+      setStatusEditItem(null);
+      setNotice(statusEditValue === "returned" ? "주인에게 전달 완료 처리했습니다." : "보관 상태를 변경했습니다.");
+    } catch (saveError) {
+      setStatusError(saveError instanceof Error ? saveError.message : "보관 상태 변경에 실패했습니다.");
+    } finally {
+      setIsSavingStatus(false);
     }
   }
 
@@ -366,14 +406,24 @@ export default function Home() {
                         {item.photoPaths.length > 1 && <span className="photo-count">+{item.photoPaths.length - 1}</span>}
                       </div>
                       <div className="item-card-body">
-                        <span className={`item-category category-text-${categoryClassNames[item.category]}`}>{item.category}</span>
-                        <h3>{item.title}</h3>
+                        <div className="item-card-meta">
+                          <span className={`item-category category-text-${categoryClassNames[item.category]}`}>{item.category}</span>
+                          <span className={`custody-badge custody-${item.custodyStatus}`}>
+                            {LOST_ITEM_CUSTODY_STATUSES.find((status) => status.value === item.custodyStatus)?.label ?? "습득자가 보관 중"}
+                          </span>
+                        </div>
+                        <h3><Link className="item-title-link" href={`/lost-items/${item.id}`}>{item.title}</Link></h3>
                         <p className="item-description">{item.description}</p>
                         <div className="item-location"><MapPin size={15} /><span>{item.location}</span></div>
                         {item.isOwner && (
-                          <button className="item-delete" aria-label={`${item.title} 게시물 삭제`} onClick={() => { setDeleteError(""); setDeleteTarget(item); }}>
-                            <Trash2 size={14} /> 게시물 삭제
-                          </button>
+                          <div className="owner-actions">
+                            <button className="item-status-edit" aria-label={`${item.title} 보관 상태 변경`} onClick={() => { setStatusError(""); setStatusEditValue(item.custodyStatus); setStatusEditItem(item); }}>
+                              상태 변경
+                            </button>
+                            <button className="item-delete" aria-label={`${item.title} 게시물 삭제`} onClick={() => { setDeleteError(""); setDeleteTarget(item); }}>
+                              <Trash2 size={14} /> 삭제
+                            </button>
+                          </div>
                         )}
                       </div>
                     </article>
@@ -428,6 +478,17 @@ export default function Home() {
                 </label>
               </div>
               {selectedCategory && <p className="category-example">예시: {selectedCategory.examples}</p>}
+              <label className="form-field">
+                <span>보관 상태 <b>필수</b></span>
+                <span className="select-wrap">
+                  <select required value={fields.custodyStatus} onChange={(event) => updateField("custodyStatus", event.target.value as LostItemCustodyStatus)}>
+                    {LOST_ITEM_CUSTODY_STATUSES.map((status) => (
+                      <option key={status.value} value={status.value}>{status.label}</option>
+                    ))}
+                  </select>
+                  <ChevronDown size={16} />
+                </span>
+              </label>
               <label className="form-field">
                 <span>습득 장소 <b>필수</b></span>
                 <input required maxLength={120} value={fields.location} onChange={(event) => updateField("location", event.target.value)} placeholder="건물명이나 주변 장소를 적어 주세요" />
@@ -485,6 +546,39 @@ export default function Home() {
               <button className="button button-danger" type="button" onClick={deleteItem} disabled={isDeletingItem}>
                 {isDeletingItem ? <LoaderCircle className="spin" size={16} /> : <Trash2 size={16} />}
                 {isDeletingItem ? "삭제 중" : "삭제"}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+      {statusEditItem && (
+        <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setStatusEditItem(null)}>
+          <section className="registration-dialog delete-dialog" role="dialog" aria-modal="true" aria-labelledby="status-edit-title">
+            <div className="dialog-header">
+              <div>
+                <p className="section-kicker">보관 정보</p>
+                <h2 id="status-edit-title">보관 상태 변경</h2>
+              </div>
+              <button className="icon-button" type="button" onClick={() => setStatusEditItem(null)} aria-label="상태 변경 창 닫기"><X size={20} /></button>
+            </div>
+            <p className="dialog-intro">{statusEditItem.title}</p>
+            <label className="form-field">
+              <span>현재 상태</span>
+              <span className="select-wrap">
+                <select value={statusEditValue} onChange={(event) => setStatusEditValue(event.target.value as LostItemCustodyStatus)}>
+                  {LOST_ITEM_CUSTODY_STATUSES.map((status) => (
+                    <option key={status.value} value={status.value}>{status.label}</option>
+                  ))}
+                </select>
+                <ChevronDown size={16} />
+              </span>
+            </label>
+            {statusError && <p className="form-error" role="alert"><AlertCircle size={16} />{statusError}</p>}
+            <div className="dialog-actions">
+              <button className="button button-quiet" type="button" onClick={() => setStatusEditItem(null)}>취소</button>
+              <button className="button button-primary" type="button" onClick={saveCustodyStatus} disabled={isSavingStatus}>
+                {isSavingStatus ? <LoaderCircle className="spin" size={16} /> : <Check size={16} />}
+                {isSavingStatus ? "저장 중" : "저장"}
               </button>
             </div>
           </section>

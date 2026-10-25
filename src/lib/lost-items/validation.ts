@@ -1,4 +1,9 @@
 import { isItemCategory, type ItemCategory } from "./categories";
+import {
+  DEFAULT_LOST_ITEM_CUSTODY_STATUS,
+  isLostItemCustodyStatus,
+  type LostItemCustodyStatus,
+} from "./custody-status";
 
 export type CreateLostReportInput = {
   title: string;
@@ -14,6 +19,7 @@ export type CreateLostItemInput = {
   location: string;
   description: string;
   foundDate: string;
+  custodyStatus?: LostItemCustodyStatus;
 };
 
 export class LostItemValidationError extends Error {
@@ -75,7 +81,22 @@ export function parseCreateLostItemInput(
     throw new LostItemValidationError("foundDate cannot be in the future.");
   }
 
-  return { title, category, location, description, foundDate };
+  const custodyStatusValue = input.custodyStatus;
+  if (
+    custodyStatusValue !== undefined &&
+    (typeof custodyStatusValue !== "string" || !isLostItemCustodyStatus(custodyStatusValue))
+  ) {
+    throw new LostItemValidationError("custodyStatus is not supported.");
+  }
+
+  return {
+    title,
+    category,
+    location,
+    description,
+    foundDate,
+    custodyStatus: (custodyStatusValue as LostItemCustodyStatus | undefined) ?? DEFAULT_LOST_ITEM_CUSTODY_STATUS,
+  };
 }
 
 export function parseCreateLostReportInput(

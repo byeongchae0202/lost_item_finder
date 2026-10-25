@@ -60,6 +60,9 @@ export async function POST(request: Request) {
         location: formData.get("location"),
         description: formData.get("description"),
         foundDate: formData.get("foundDate"),
+        ...(typeof formData.get("custodyStatus") === "string"
+          ? { custodyStatus: formData.get("custodyStatus") }
+          : {}),
       };
 
       for (const value of formData.getAll("photos")) {

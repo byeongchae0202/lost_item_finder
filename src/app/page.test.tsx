@@ -35,6 +35,9 @@ describe("app shell", () => {
 
     expect(dateInput).toHaveProperty("value", today);
     expect(dateInput.getAttribute("max")).toBe(today);
+    const custodySelect = screen.getByLabelText(/보관 상태/);
+    expect(custodySelect).toHaveProperty("value", "held_by_finder");
+    expect(within(custodySelect).getAllByRole("option")).toHaveLength(4);
   });
 
   it("opens the private lost report form with required fields", () => {
@@ -75,5 +78,39 @@ describe("app shell", () => {
 
     await waitFor(() => expect(screen.queryByRole("heading", { name: "검은색 지갑" })).toBeNull());
     expect(fetchMock).toHaveBeenLastCalledWith("/api/lost-items/owned-1", { method: "DELETE" });
+  });
+
+  it("lets the poster change a saved custody status", async () => {
+    const ownedItem = {
+      id: "owned-status-1",
+      title: "검은색 지갑",
+      category: "지갑/카드",
+      location: "도서관",
+      description: "파란 키링",
+      foundDate: "2026-10-20",
+      custodyStatus: "held_by_finder",
+      photoPaths: [],
+      createdAt: "2026-10-20T10:00:00.000Z",
+      isOwner: true,
+    };
+    const fetchMock = vi.mocked(globalThis.fetch);
+    fetchMock.mockImplementation((_input, init) => Promise.resolve((
+      init?.method === "PATCH"
+        ? { ok: true, json: async () => ({ id: ownedItem.id, custodyStatus: "student_union_office" }) }
+        : { ok: true, json: async () => [ownedItem] }
+    ) as Response));
+    render(<Home />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "검은색 지갑 보관 상태 변경" }));
+    const statusDialog = screen.getByRole("dialog", { name: "보관 상태 변경" });
+    fireEvent.change(within(statusDialog).getByRole("combobox"), { target: { value: "student_union_office" } });
+    fireEvent.click(within(statusDialog).getByRole("button", { name: "저장" }));
+
+    await screen.findByText("학생회실에 맡김");
+    expect(fetchMock).toHaveBeenLastCalledWith("/api/lost-items/owned-status-1", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ custodyStatus: "student_union_office" }),
+    });
   });
 });
