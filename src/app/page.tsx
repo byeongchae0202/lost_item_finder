@@ -49,6 +49,7 @@ type RegistrationFields = {
   description: string;
   foundDate: string;
   custodyStatus: LostItemCustodyStatus;
+  custodyNote: string;
 };
 
 const categoryIcons: Record<ItemCategory, LucideIcon> = {
@@ -76,6 +77,7 @@ const emptyFields: RegistrationFields = {
   description: "",
   foundDate: "",
   custodyStatus: DEFAULT_LOST_ITEM_CUSTODY_STATUS,
+  custodyNote: "",
 };
 
 function localDateValue(date = new Date()): string {
@@ -96,6 +98,11 @@ function formatDate(value: string): string {
   return value.replaceAll("-", ".");
 }
 
+function custodyStatusLabel(status: LostItemCustodyStatus, note?: string): string {
+  const label = LOST_ITEM_CUSTODY_STATUSES.find((entry) => entry.value === status)?.label ?? "습득자가 보관 중";
+  return status === "other" && note ? `${label}: ${note}` : label;
+}
+
 export default function Home() {
   const [items, setItems] = useState<ListedLostItem[]>([]);
   const [filters, setFilters] = useState<SearchFilters>(emptyFilters);
@@ -111,6 +118,7 @@ export default function Home() {
   const [deleteError, setDeleteError] = useState("");
   const [statusEditItem, setStatusEditItem] = useState<ListedLostItem | null>(null);
   const [statusEditValue, setStatusEditValue] = useState<LostItemCustodyStatus>(DEFAULT_LOST_ITEM_CUSTODY_STATUS);
+  const [statusEditNote, setStatusEditNote] = useState("");
   const [isSavingStatus, setIsSavingStatus] = useState(false);
   const [statusError, setStatusError] = useState("");
   const [error, setError] = useState("");
@@ -254,19 +262,25 @@ export default function Home() {
       const response = await fetch(`/api/lost-items/${statusEditItem.id}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ custodyStatus: statusEditValue }),
+        body: JSON.stringify({
+          custodyStatus: statusEditValue,
+          ...(statusEditValue === "other" ? { custodyNote: statusEditNote.trim() } : {}),
+        }),
       });
-      if (!response.ok) throw new Error("보관 상태를 변경할 수 없습니다.");
+      const result = await response.json() as { custodyStatus?: LostItemCustodyStatus; custodyNote?: string; error?: string };
+      if (!response.ok || !result.custodyStatus) throw new Error(result.error ?? "보관 상태를 변경할 수 없습니다.");
 
-      if (statusEditValue === "returned") {
+      if (result.custodyStatus === "returned") {
         setItems((current) => current.filter((item) => item.id !== statusEditItem.id));
       } else {
         setItems((current) => current.map((item) => item.id === statusEditItem.id
-          ? { ...item, custodyStatus: statusEditValue }
+          ? { ...item, custodyStatus: result.custodyStatus!, custodyNote: result.custodyNote }
           : item));
       }
+      setStatusEditValue(result.custodyStatus);
+      setStatusEditNote(result.custodyNote ?? "");
       setStatusEditItem(null);
-      setNotice(statusEditValue === "returned" ? "주인에게 전달 완료 처리했습니다." : "보관 상태를 변경했습니다.");
+      setNotice(result.custodyStatus === "returned" ? "주인에게 전달 완료 처리했습니다." : "보관 상태를 변경했습니다.");
     } catch (saveError) {
       setStatusError(saveError instanceof Error ? saveError.message : "보관 상태 변경에 실패했습니다.");
     } finally {
@@ -409,7 +423,7 @@ export default function Home() {
                         <div className="item-card-meta">
                           <span className={`item-category category-text-${categoryClassNames[item.category]}`}>{item.category}</span>
                           <span className={`custody-badge custody-${item.custodyStatus}`}>
-                            {LOST_ITEM_CUSTODY_STATUSES.find((status) => status.value === item.custodyStatus)?.label ?? "습득자가 보관 중"}
+                            {custodyStatusLabel(item.custodyStatus, item.custodyNote)}
                           </span>
                         </div>
                         <h3><Link className="item-title-link" href={`/lost-items/${item.id}`}>{item.title}</Link></h3>
@@ -417,7 +431,7 @@ export default function Home() {
                         <div className="item-location"><MapPin size={15} /><span>{item.location}</span></div>
                         {item.isOwner && (
                           <div className="owner-actions">
-                            <button className="item-status-edit" aria-label={`${item.title} 보관 상태 변경`} onClick={() => { setStatusError(""); setStatusEditValue(item.custodyStatus); setStatusEditItem(item); }}>
+                            <button className="item-status-edit" aria-label={`${item.title} 보관 상태 변경`} onClick={() => { setStatusError(""); setStatusEditValue(item.custodyStatus); setStatusEditNote(item.custodyNote ?? ""); setStatusEditItem(item); }}>
                               상태 변경
                             </button>
                             <button className="item-delete" aria-label={`${item.title} 게시물 삭제`} onClick={() => { setDeleteError(""); setDeleteTarget(item); }}>
@@ -489,6 +503,12 @@ export default function Home() {
                   <ChevronDown size={16} />
                 </span>
               </label>
+              {fields.custodyStatus === "other" && (
+                <label className="form-field">
+                  <span>보관 상태 설명 <b>필수</b></span>
+                  <input required maxLength={80} value={fields.custodyNote} onChange={(event) => updateField("custodyNote", event.target.value)} placeholder="예: 본관 안내데스크에 맡김" />
+                </label>
+              )}
               <label className="form-field">
                 <span>습득 장소 <b>필수</b></span>
                 <input required maxLength={120} value={fields.location} onChange={(event) => updateField("location", event.target.value)} placeholder="건물명이나 주변 장소를 적어 주세요" />
@@ -573,6 +593,12 @@ export default function Home() {
                 <ChevronDown size={16} />
               </span>
             </label>
+            {statusEditValue === "other" && (
+              <label className="form-field">
+                <span>보관 상태 설명 <b>필수</b></span>
+                <input required maxLength={80} value={statusEditNote} onChange={(event) => setStatusEditNote(event.target.value)} placeholder="예: 본관 안내데스크에 맡김" />
+              </label>
+            )}
             {statusError && <p className="form-error" role="alert"><AlertCircle size={16} />{statusError}</p>}
             <div className="dialog-actions">
               <button className="button button-quiet" type="button" onClick={() => setStatusEditItem(null)}>취소</button>

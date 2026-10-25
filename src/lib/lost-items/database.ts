@@ -34,6 +34,7 @@ type LostItemRow = {
   owner_token_hash: string | null;
   status: "available" | "resolved";
   custody_status: LostItemCustodyStatus;
+  custody_note: string | null;
   created_at: string;
 };
 
@@ -68,6 +69,7 @@ export function initializeLostItemsDatabase(database: Database.Database): void {
       owner_token_hash TEXT,
       status TEXT NOT NULL DEFAULT 'available',
       custody_status TEXT NOT NULL DEFAULT 'held_by_finder',
+      custody_note TEXT,
       created_at TEXT NOT NULL
     );
 
@@ -99,6 +101,9 @@ export function initializeLostItemsDatabase(database: Database.Database): void {
   }
   if (!columnNames.has("custody_status")) {
     database.exec("ALTER TABLE lost_items ADD COLUMN custody_status TEXT NOT NULL DEFAULT 'held_by_finder'");
+  }
+  if (!columnNames.has("custody_note")) {
+    database.exec("ALTER TABLE lost_items ADD COLUMN custody_note TEXT");
   }
   database.exec(
     "UPDATE lost_items SET custody_status = 'returned' WHERE status = 'resolved' AND custody_status = 'held_by_finder'",
@@ -132,6 +137,7 @@ function mapLostItem(row: LostItemRow): LostItemRecord {
     foundDate: row.found_date,
     photoPaths: JSON.parse(row.photo_paths) as string[],
     custodyStatus: row.custody_status ?? DEFAULT_LOST_ITEM_CUSTODY_STATUS,
+    custodyNote: row.custody_note ?? undefined,
     createdAt: row.created_at,
   };
 }
@@ -144,6 +150,7 @@ export function insertLostItem(
     photoPaths?: string[];
     ownerTokenHash?: string;
     custodyStatus?: LostItemCustodyStatus;
+    custodyNote?: string;
   } = {},
 ): LostItemRecord {
   const id = randomUUID();
@@ -154,8 +161,8 @@ export function insertLostItem(
   database
     .prepare(
       `INSERT INTO lost_items
-        (id, title, category, location, description, found_date, photo_paths, owner_token_hash, status, custody_status, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        (id, title, category, location, description, found_date, photo_paths, owner_token_hash, status, custody_status, custody_note, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       id,
@@ -168,6 +175,7 @@ export function insertLostItem(
       options.ownerTokenHash ?? null,
       visibilityStatus,
       custodyStatus,
+      options.custodyNote ?? input.custodyNote ?? null,
       createdAt,
     );
 
@@ -235,15 +243,16 @@ export function updateOwnedLostItemCustodyStatus(
   id: string,
   ownerTokenHash: string,
   custodyStatus: LostItemCustodyStatus,
+  custodyNote?: string,
 ): boolean {
   const visibilityStatus = custodyStatus === "returned" ? "resolved" : "available";
   const result = database
     .prepare(
       `UPDATE lost_items
-       SET custody_status = ?, status = ?
+      SET custody_status = ?, custody_note = ?, status = ?
        WHERE id = ? AND owner_token_hash = ? AND status = 'available'`,
     )
-    .run(custodyStatus, visibilityStatus, id, ownerTokenHash);
+    .run(custodyStatus, custodyNote ?? null, visibilityStatus, id, ownerTokenHash);
 
   return result.changes > 0;
 }

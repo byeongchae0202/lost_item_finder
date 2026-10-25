@@ -60,4 +60,29 @@ describe("lost item detail custody status", () => {
     expect(screen.getByText("주인에게 전달 완료").className).toContain("custody-returned");
     expect(screen.queryByLabelText("보관 상태 수정")).toBeNull();
   });
+
+  it("saves the owner's custom other custody note", async () => {
+    const fetchMock = vi.mocked(globalThis.fetch);
+    fetchMock.mockImplementation((_input, init) => Promise.resolve({
+      ok: true,
+      json: async () => init?.method === "PATCH"
+        ? { id: detail.id, custodyStatus: "other", custodyNote: "본관 안내데스크" }
+        : detail,
+    } as Response));
+    render(<LostItemDetailView itemId="item-1" />);
+    await screen.findByRole("heading", { name: "검은색 지갑" });
+
+    fireEvent.change(screen.getByLabelText("보관 상태 수정"), { target: { value: "other" } });
+    const noteInput = screen.getByLabelText("보관 상태 설명");
+    fireEvent.change(noteInput, { target: { value: "본관 안내데스크" } });
+    fireEvent.submit(noteInput.closest("form")!);
+
+    await screen.findByText("보관 상태를 저장했습니다.");
+    expect(document.querySelector(".item-detail .custody-badge")?.textContent).toContain("기타: 본관 안내데스크");
+    expect(fetchMock).toHaveBeenCalledWith("/api/lost-items/item-1", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ custodyStatus: "other", custodyNote: "본관 안내데스크" }),
+    });
+  });
 });

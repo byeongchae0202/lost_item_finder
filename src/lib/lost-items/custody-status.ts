@@ -2,6 +2,7 @@ export const LOST_ITEM_CUSTODY_STATUSES = [
   { value: "held_by_finder", label: "습득자가 보관 중" },
   { value: "department_office", label: "학과 사무실에 맡김" },
   { value: "student_union_office", label: "학생회실에 맡김" },
+  { value: "other", label: "기타" },
   { value: "returned", label: "주인에게 전달 완료" },
 ] as const;
 

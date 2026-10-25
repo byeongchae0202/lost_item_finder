@@ -16,6 +16,7 @@ type ItemDetail = {
   foundDate: string;
   photoPaths: string[];
   custodyStatus: LostItemCustodyStatus;
+  custodyNote?: string;
   isOwner: boolean;
 };
 
@@ -30,6 +31,7 @@ function formatDate(value: string): string {
 export default function LostItemDetailView({ itemId }: LostItemDetailViewProps) {
   const [item, setItem] = useState<ItemDetail | null>(null);
   const [selectedStatus, setSelectedStatus] = useState<LostItemCustodyStatus>("held_by_finder");
+  const [selectedNote, setSelectedNote] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
@@ -46,6 +48,7 @@ export default function LostItemDetailView({ itemId }: LostItemDetailViewProps) 
         if (!active) return;
         setItem(result);
         setSelectedStatus(result.custodyStatus);
+        setSelectedNote(result.custodyNote ?? "");
       })
       .catch((requestError: unknown) => {
         if (active) setError(requestError instanceof Error ? requestError.message : "요청에 실패했습니다.");
@@ -70,14 +73,22 @@ export default function LostItemDetailView({ itemId }: LostItemDetailViewProps) 
       const response = await fetch(`/api/lost-items/${encodeURIComponent(item.id)}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ custodyStatus: selectedStatus }),
+        body: JSON.stringify({
+          custodyStatus: selectedStatus,
+          ...(selectedStatus === "other" ? { custodyNote: selectedNote.trim() } : {}),
+        }),
       });
-      const result = await response.json() as { custodyStatus?: LostItemCustodyStatus; error?: string };
+      const result = await response.json() as { custodyStatus?: LostItemCustodyStatus; custodyNote?: string; error?: string };
       if (!response.ok || !result.custodyStatus) {
         throw new Error(result.error ?? "보관 상태를 저장하지 못했습니다.");
       }
-      setItem((current) => current ? { ...current, custodyStatus: result.custodyStatus! } : current);
+      setItem((current) => current ? {
+        ...current,
+        custodyStatus: result.custodyStatus!,
+        custodyNote: result.custodyNote,
+      } : current);
       setSelectedStatus(result.custodyStatus);
+      setSelectedNote(result.custodyNote ?? "");
       setNotice(result.custodyStatus === "returned" ? "주인에게 전달 완료 처리했습니다." : "보관 상태를 저장했습니다.");
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "보관 상태 저장에 실패했습니다.");
@@ -86,8 +97,10 @@ export default function LostItemDetailView({ itemId }: LostItemDetailViewProps) 
     }
   }
 
-  const statusLabel = (value: LostItemCustodyStatus) =>
-    LOST_ITEM_CUSTODY_STATUSES.find((status) => status.value === value)?.label ?? "습득자가 보관 중";
+  const statusLabel = (value: LostItemCustodyStatus, note?: string) => {
+    const label = LOST_ITEM_CUSTODY_STATUSES.find((status) => status.value === value)?.label ?? "습득자가 보관 중";
+    return value === "other" && note ? `${label}: ${note}` : label;
+  };
 
   return (
     <main className="app-shell detail-page">
@@ -131,7 +144,7 @@ export default function LostItemDetailView({ itemId }: LostItemDetailViewProps) 
                 <span className="item-category">{item.category}</span>
                 <span className={`custody-badge custody-${item.custodyStatus} ${item.custodyStatus === "returned" ? "custody-badge-complete" : ""}`}>
                   {item.custodyStatus === "returned" && <Check size={13} />}
-                  {statusLabel(item.custodyStatus)}
+                  {statusLabel(item.custodyStatus, item.custodyNote)}
                 </span>
               </div>
               <div className="item-detail-title-row">
@@ -153,6 +166,16 @@ export default function LostItemDetailView({ itemId }: LostItemDetailViewProps) 
                     </select>
                     <ChevronDown size={16} />
                   </span>
+                  {selectedStatus === "other" && (
+                    <input
+                      aria-label="보관 상태 설명"
+                      required
+                      maxLength={80}
+                      value={selectedNote}
+                      onChange={(event) => setSelectedNote(event.target.value)}
+                      placeholder="예: 본관 안내데스크에 맡김"
+                    />
+                  )}
                   <button className="button button-primary" type="submit" disabled={isSaving || selectedStatus === item.custodyStatus}>
                     {isSaving ? <LoaderCircle className="spin" size={16} /> : <Check size={16} />}
                     상태 저장

@@ -37,7 +37,12 @@ describe("app shell", () => {
     expect(dateInput.getAttribute("max")).toBe(today);
     const custodySelect = screen.getByLabelText(/보관 상태/);
     expect(custodySelect).toHaveProperty("value", "held_by_finder");
-    expect(within(custodySelect).getAllByRole("option")).toHaveLength(4);
+    expect(within(custodySelect).getAllByRole("option")).toHaveLength(5);
+    fireEvent.change(custodySelect, { target: { value: "other" } });
+    const custodyNote = screen.getByLabelText(/보관 상태 설명/);
+    expect(custodyNote).toHaveProperty("required", true);
+    fireEvent.change(custodyNote, { target: { value: "본관 안내데스크" } });
+    expect(custodyNote).toHaveProperty("value", "본관 안내데스크");
   });
 
   it("opens the private lost report form with required fields", () => {

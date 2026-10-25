@@ -63,13 +63,28 @@ export async function PATCH(
     return NextResponse.json({ error: "Request body must be valid JSON." }, { status: 400 });
   }
 
-  if (typeof body !== "object" || body === null || typeof (body as { custodyStatus?: unknown }).custodyStatus !== "string") {
+  if (
+    typeof body !== "object" ||
+    body === null ||
+    typeof (body as { custodyStatus?: unknown }).custodyStatus !== "string"
+  ) {
     return NextResponse.json({ error: "custodyStatus is required." }, { status: 400 });
   }
 
   const custodyStatus = (body as { custodyStatus: string }).custodyStatus;
+  const custodyNoteValue = (body as { custodyNote?: unknown }).custodyNote;
   if (!isLostItemCustodyStatus(custodyStatus)) {
     return NextResponse.json({ error: "custodyStatus is not supported." }, { status: 400 });
+  }
+  if (custodyNoteValue !== undefined && typeof custodyNoteValue !== "string") {
+    return NextResponse.json({ error: "custodyNote must be text." }, { status: 400 });
+  }
+  const custodyNote = typeof custodyNoteValue === "string" ? custodyNoteValue.trim() : "";
+  if (custodyStatus === "other" && custodyNote.length === 0) {
+    return NextResponse.json({ error: "custodyNote is required for the other status." }, { status: 400 });
+  }
+  if (custodyNote.length > 80) {
+    return NextResponse.json({ error: "custodyNote must be 80 characters or fewer." }, { status: 400 });
   }
 
   const item = getLostItem(id);
@@ -79,6 +94,7 @@ export async function PATCH(
     id,
     ownerTokenHash,
     custodyStatus,
+    custodyNote,
   );
   if (!updated) return notFoundResponse();
 
@@ -94,7 +110,7 @@ export async function PATCH(
   }
 
   return NextResponse.json(
-    { id, custodyStatus },
+    { id, custodyStatus, custodyNote: custodyStatus === "other" ? custodyNote : undefined },
     { headers: { "Cache-Control": "no-store" } },
   );
 }

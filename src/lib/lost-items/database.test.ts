@@ -96,6 +96,7 @@ describe("lost item database", () => {
     expect(lostItemColumns.map((column) => column.name)).toContain("owner_token_hash");
     expect(lostItemColumns.map((column) => column.name)).toContain("status");
     expect(lostItemColumns.map((column) => column.name)).toContain("custody_status");
+    expect(lostItemColumns.map((column) => column.name)).toContain("custody_note");
   });
 
   it("stores owner-edited custody status and hides returned items", () => {
@@ -119,6 +120,24 @@ describe("lost item database", () => {
     expect(listLostItems(database)).toEqual([]);
     expect(getLostItemById(database, item.id)).toBeNull();
     expect(getLostItemDetailsById(database, item.id)?.custodyStatus).toBe("returned");
+  });
+
+  it("persists a custom note for the other custody status", () => {
+    const item = insertLostItem(
+      database,
+      {
+        title: "기타 보관 물품",
+        category: "기타 물품",
+        location: "본관",
+        description: "메모",
+        foundDate: "2000-01-01",
+        custodyStatus: "other",
+        custodyNote: "야간 경비실",
+      },
+    );
+
+    expect(item.custodyStatus).toBe("other");
+    expect(item.custodyNote).toBe("야간 경비실");
   });
 
   it("maps previously resolved posts to the completed custody status", () => {

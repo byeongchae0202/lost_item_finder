@@ -105,6 +105,20 @@ describe("lost items route", () => {
     await expect(response.json()).resolves.toMatchObject({ id: "item-1" });
   });
 
+  it("stores a custom note when the other custody status is selected", async () => {
+    const input = { ...validInput, custodyStatus: "other", custodyNote: "본관 안내데스크" };
+    createLostItemMock.mockReturnValue({ id: "item-1", ...input });
+
+    const response = await POST(new Request("http://localhost/api/lost-items", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
+    }));
+
+    expect(response.status).toBe(201);
+    expect(createLostItemMock).toHaveBeenCalledWith(input, [], expect.stringMatching(/^[a-f\d]{64}$/));
+  });
+
   it("stores uploaded photos and associates their paths with the item", async () => {
     const formData = new FormData();
     for (const [field, value] of Object.entries(validInput)) {

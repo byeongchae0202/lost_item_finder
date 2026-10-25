@@ -97,7 +97,7 @@ describe("owned lost item deletion route", () => {
     expect(response.headers.get("cache-control")).toBe("no-store");
   });
 
-  it.each(["held_by_finder", "department_office", "student_union_office", "returned"])(
+  it.each(["held_by_finder", "department_office", "student_union_office", "other", "returned"])(
     "lets only the poster persist the %s custody status",
     async (custodyStatus) => {
     getLostItemOwnerTokenHashMock.mockReturnValue(hashReportOwnerToken(ownerToken));
@@ -111,18 +111,23 @@ describe("owned lost item deletion route", () => {
           cookie: `${lostItemOwnerCookieName(itemId)}=${ownerToken}`,
           "content-type": "application/json",
         },
-        body: JSON.stringify({ custodyStatus }),
+        body: JSON.stringify({ custodyStatus, ...(custodyStatus === "other" ? { custodyNote: "안내데스크" } : {}) }),
       }),
       { params: Promise.resolve({ id: itemId }) },
     );
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ id: itemId, custodyStatus });
+    await expect(response.json()).resolves.toEqual({
+      id: itemId,
+      custodyStatus,
+      ...(custodyStatus === "other" ? { custodyNote: "안내데스크" } : {}),
+    });
     expect(updateOwnedLostItemCustodyStatusMock).toHaveBeenCalledWith(
       expect.anything(),
       itemId,
       hashReportOwnerToken(ownerToken),
       custodyStatus,
+      custodyStatus === "other" ? "안내데스크" : "",
     );
   });
 

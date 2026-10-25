@@ -49,15 +49,30 @@ describe("parseCreateLostItemInput", () => {
     ).toThrow("category must be a supported category.");
   });
 
-  it("defaults and accepts the four supported custody statuses", () => {
+  it("defaults and accepts the five supported custody statuses", () => {
     expect(parseCreateLostItemInput(validInput, "2026-10-24").custodyStatus).toBe("held_by_finder");
-    for (const custodyStatus of ["held_by_finder", "department_office", "student_union_office", "returned"]) {
-      expect(parseCreateLostItemInput({ ...validInput, custodyStatus }, "2026-10-24").custodyStatus)
+    for (const custodyStatus of ["held_by_finder", "department_office", "student_union_office", "other", "returned"]) {
+      expect(parseCreateLostItemInput({
+        ...validInput,
+        custodyStatus,
+        ...(custodyStatus === "other" ? { custodyNote: "본관 안내데스크" } : {}),
+      }, "2026-10-24").custodyStatus)
         .toBe(custodyStatus);
     }
     expect(() =>
       parseCreateLostItemInput({ ...validInput, custodyStatus: "lost" }, "2026-10-24"),
     ).toThrow("custodyStatus is not supported.");
+    expect(() =>
+      parseCreateLostItemInput({ ...validInput, custodyStatus: "other" }, "2026-10-24"),
+    ).toThrow("custodyNote is required for the other status.");
+    expect(parseCreateLostItemInput({
+      ...validInput,
+      custodyStatus: "other",
+      custodyNote: "  본관 안내데스크  ",
+    }, "2026-10-24").custodyNote).toBe("본관 안내데스크");
+    expect(() =>
+      parseCreateLostItemInput({ ...validInput, custodyStatus: "other", custodyNote: "가".repeat(81) }, "2026-10-24"),
+    ).toThrow("custodyNote must be 80 characters or fewer.");
   });
 
   it("rejects invalid calendar dates", () => {

@@ -60,8 +60,11 @@ export async function POST(request: Request) {
         location: formData.get("location"),
         description: formData.get("description"),
         foundDate: formData.get("foundDate"),
-        ...(typeof formData.get("custodyStatus") === "string"
-          ? { custodyStatus: formData.get("custodyStatus") }
+          ...(typeof formData.get("custodyStatus") === "string"
+            ? { custodyStatus: formData.get("custodyStatus") }
+            : {}),
+        ...(typeof formData.get("custodyNote") === "string"
+          ? { custodyNote: formData.get("custodyNote") }
           : {}),
       };
 

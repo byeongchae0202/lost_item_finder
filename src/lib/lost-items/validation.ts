@@ -20,6 +20,7 @@ export type CreateLostItemInput = {
   description: string;
   foundDate: string;
   custodyStatus?: LostItemCustodyStatus;
+  custodyNote?: string;
 };
 
 export class LostItemValidationError extends Error {
@@ -88,6 +89,18 @@ export function parseCreateLostItemInput(
   ) {
     throw new LostItemValidationError("custodyStatus is not supported.");
   }
+  const custodyStatus = (custodyStatusValue as LostItemCustodyStatus | undefined) ?? DEFAULT_LOST_ITEM_CUSTODY_STATUS;
+  const custodyNoteValue = input.custodyNote;
+  if (custodyNoteValue !== undefined && typeof custodyNoteValue !== "string") {
+    throw new LostItemValidationError("custodyNote must be text.");
+  }
+  const custodyNote = typeof custodyNoteValue === "string" ? custodyNoteValue.trim() : "";
+  if (custodyStatus === "other" && custodyNote.length === 0) {
+    throw new LostItemValidationError("custodyNote is required for the other status.");
+  }
+  if (custodyNote.length > 80) {
+    throw new LostItemValidationError("custodyNote must be 80 characters or fewer.");
+  }
 
   return {
     title,
@@ -95,7 +108,8 @@ export function parseCreateLostItemInput(
     location,
     description,
     foundDate,
-    custodyStatus: (custodyStatusValue as LostItemCustodyStatus | undefined) ?? DEFAULT_LOST_ITEM_CUSTODY_STATUS,
+    custodyStatus,
+    ...(custodyNote ? { custodyNote } : {}),
   };
 }
 
